@@ -264,6 +264,50 @@ cd /var/www/gym-checkin
 pm2 start ecosystem.config.js
 ```
 
+#### Handling ES Module Compatibility Issues
+
+If you encounter an error like `Error [ERR_REQUIRE_ESM]` when starting PM2, this is because your project is set up as an ES Module (with `"type": "module"` in package.json), but PM2 uses CommonJS to load configuration files.
+
+You have three options to fix this:
+
+1. **Rename your ecosystem config file to use the `.cjs` extension:**
+
+```bash
+mv ecosystem.config.js ecosystem.config.cjs
+pm2 start ecosystem.config.cjs
+```
+
+2. **Create a new ecosystem config file with the `.cjs` extension:**
+
+```bash
+cat > ecosystem.config.cjs << 'EOL'
+module.exports = {
+  apps: [{
+    name: "gym-checkin",
+    script: "npm",
+    args: "start",
+    env: {
+      NODE_ENV: "production",
+    },
+    max_memory_restart: "500M",
+    log_date_format: "YYYY-MM-DD HH:mm:ss",
+    error_file: "/var/log/gym-checkin/error.log",
+    out_file: "/var/log/gym-checkin/out.log"
+  }]
+};
+EOL
+
+pm2 start ecosystem.config.cjs
+```
+
+3. **Start your application directly with PM2:**
+
+```bash
+pm2 start npm --name "gym-checkin" -- start
+```
+
+The first option (renaming to .cjs) is the cleanest solution as it maintains your ES Module setup while making the PM2 config compatible with CommonJS.
+
 ### Configure PM2 to Start on Boot
 
 ```bash
