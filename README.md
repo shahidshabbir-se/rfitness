@@ -23,6 +23,11 @@ The Gym Check-in System is designed to streamline the check-in process for gym m
   - Subscription verification
   - Payment history validation
   - Webhook support for real-time updates
+- **PostgreSQL Database**: Persistent storage for:
+  - Check-in records
+  - User accounts and permissions
+  - System configuration
+  - Analytics data
 - **Responsive Design**: Works on tablets, desktop computers, and mobile devices
 
 ## Installation Instructions
@@ -31,6 +36,7 @@ The Gym Check-in System is designed to streamline the check-in process for gym m
 
 - Node.js (v20.x or later)
 - npm (v10.x or later)
+- PostgreSQL (v14.x or later)
 - Square Developer Account with API credentials
 
 ### Local Development Setup
@@ -46,19 +52,41 @@ The Gym Check-in System is designed to streamline the check-in process for gym m
    npm install
    ```
 
-3. Create environment file:
+3. Set up PostgreSQL:
+   ```bash
+   # Install PostgreSQL (Ubuntu/Debian)
+   sudo apt update
+   sudo apt install postgresql postgresql-contrib
+   
+   # Start PostgreSQL service
+   sudo systemctl start postgresql
+   sudo systemctl enable postgresql
+   
+   # Create database and user
+   sudo -u postgres psql
+   ```
+
+   In the PostgreSQL prompt:
+   ```sql
+   CREATE DATABASE gym_checkin;
+   CREATE USER gym_user WITH ENCRYPTED PASSWORD 'your_secure_password';
+   GRANT ALL PRIVILEGES ON DATABASE gym_checkin TO gym_user;
+   \q
+   ```
+
+4. Create environment file:
    ```bash
    cp .env.example .env
    ```
 
-4. Configure environment variables (see Configuration section below)
+5. Configure environment variables (see Configuration section below)
 
-5. Start the development server:
+6. Start the development server:
    ```bash
    npm run dev
    ```
 
-6. Open your browser and navigate to `http://localhost:3000`
+7. Open your browser and navigate to `http://localhost:3000`
 
 ### Production Build
 
@@ -87,12 +115,60 @@ SQUARE_ENVIRONMENT=sandbox  # or 'production'
 SQUARE_WEBHOOK_SIGNATURE_KEY=your_webhook_signature_key  # Optional, for webhook verification
 SQUARE_LOCATION_ID=your_location_id  # Optional, for location-specific operations
 
-# Database configuration (if using SQLite)
-DATABASE_URL=file:/path/to/your/database.db
+# Database configuration (PostgreSQL)
+DATABASE_URL=postgresql://gym_user:your_secure_password@localhost:5432/gym_checkin
 
 # Application settings
 NODE_ENV=development  # or 'production'
 PORT=3000  # Optional, defaults to 3000
+```
+
+### PostgreSQL Database Schema
+
+The application uses the following database schema:
+
+```sql
+-- Users table for admin access
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'staff',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  last_login TIMESTAMP WITH TIME ZONE
+);
+
+-- Check-ins table for member visits
+CREATE TABLE check_ins (
+  id SERIAL PRIMARY KEY,
+  customer_id VARCHAR(100) NOT NULL,
+  customer_name VARCHAR(255),
+  phone_number VARCHAR(20),
+  check_in_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  membership_type VARCHAR(50),
+  location_id VARCHAR(100),
+  verified_by VARCHAR(50) REFERENCES users(username)
+);
+
+-- System logs for application events
+CREATE TABLE system_logs (
+  id SERIAL PRIMARY KEY,
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  event_type VARCHAR(50) NOT NULL,
+  message TEXT NOT NULL,
+  details JSONB,
+  severity VARCHAR(20) DEFAULT 'info'
+);
+
+-- Configuration table for system settings
+CREATE TABLE configuration (
+  key VARCHAR(50) PRIMARY KEY,
+  value JSONB NOT NULL,
+  description TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_by VARCHAR(50) REFERENCES users(username)
+);
 ```
 
 ### Square API Setup
@@ -211,12 +287,14 @@ Currently, the project does not have automated tests. When adding tests:
 - **Square API Connection Errors**: Verify your access token and environment settings
 - **Check-in Verification Failures**: Ensure the phone number format matches what's in Square
 - **Webhook Processing Issues**: Check the webhook signature key and endpoint configuration
+- **Database Connection Issues**: Verify your PostgreSQL connection string and credentials
 
 ### Debugging
 
 - Check the server logs for error messages
 - Use the System Status tab in the admin dashboard to verify Square API connectivity
 - For local development, use the Network tab in browser DevTools to inspect API requests
+- For database issues, connect directly to PostgreSQL to verify data integrity
 
 ## Contributing
 
