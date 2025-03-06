@@ -170,8 +170,24 @@ npm install --production
 ### Build the Application
 
 ```bash
+cd /var/www/gym-checkin
+```
+
+If you encounter a "remix: not found" error when running `npm run build`, use one of these alternative build commands:
+
+```bash
+# Option 1: Use npx to run the locally installed remix CLI
+npx remix vite:build
+
+# Option 2: Use the direct path to the remix binary
+./node_modules/.bin/remix vite:build
+
+# Option 3: Install remix globally and then run the build
+npm install -g @remix-run/dev
 npm run build
 ```
+
+Choose the option that works best for your environment. Option 1 or 2 is generally preferred as they use the locally installed version.
 
 ## 5. Environment Configuration
 
