@@ -95,6 +95,7 @@ export function getEnv() {
     SQUARE_ACCESS_TOKEN: process.env.SQUARE_ACCESS_TOKEN || '',
     SQUARE_ENVIRONMENT: process.env.SQUARE_ENVIRONMENT || 'sandbox',
     SQUARE_WEBHOOK_SIGNATURE_KEY: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY || '',
+    WEBHOOK_URL=https://checkin.rfitnessbelfast.com/webhook || '',
     SQUARE_LOCATION_ID: process.env.SQUARE_LOCATION_ID || '',
     NODE_ENV: process.env.NODE_ENV || 'development',
     DATABASE_URL: process.env.DATABASE_URL || 'postgresql://gym_user:your_secure_password@localhost:5432/gym_checkin',
