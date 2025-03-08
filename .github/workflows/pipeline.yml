@@ -9,28 +9,8 @@ permissions:
   packages: write
 
 jobs:
-  # temp comment
-  # run-tests:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Install Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 22
-  #         cache: "pnpm"
-  #
-  #     - name: Install dependencies
-  #       run: pnpm install --frozen-lockfile
-  #
-  #     - name: Run tests
-  #       run: pnpm test
-
   build-and-push-image:
     runs-on: ubuntu-latest
-    # needs:
-    #   - run-tests
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,20 +46,11 @@ jobs:
           chmod 600 ~/.ssh/deploy_ed25519
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Copy docker-compose.yml to Server
-        run: |
-          scp -i ~/.ssh/deploy_ed25519 docker-compose.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/deploy/docker-compose.yml
-
-      - name: Deploy to Server
-        env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: |
-          ssh -i ~/.ssh/deploy_ed25519 $SERVER_USER@$SERVER_IP << 'EOF'
-            docker login ghcr.io -u $GHCR_USERNAME -p $GHCR_TOKEN
-            docker pull ghcr.io/shahidshabbir-se/rfitness:latest
-            docker stack deploy --compose-file /home/$SERVER_USER/docker-compose.yml rfitness
-            docker system prune -f  # Cleanup old images
-          EOF
+      - name: Deploy with Docker Stack
+        uses: cssnr/stack-deploy-action@v1
+        with:
+          name: rfitness
+          file: docker-compose.yml
+          host: ${{ secrets.SERVER_IP }}
+          user: ${{ secrets.SERVER_USER }}
+          ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
