@@ -68,7 +68,7 @@ jobs:
 
       - name: Copy docker-compose.yml to Server
         run: |
-          scp -i ~/.ssh/deploy_ed25519 docker-compose.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SERVER_USER }}/docker-compose.yml
+          scp -i ~/.ssh/deploy_ed25519 docker-compose.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/home/deploy/docker-compose.yml
 
       - name: Deploy to Server
         env:
