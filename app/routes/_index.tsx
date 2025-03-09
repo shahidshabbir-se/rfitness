@@ -23,7 +23,7 @@ export default function Index() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-100">
       <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-lg">
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-gray-800">Gym Check-in V2</h1>
+          <h1 className="text-3xl font-bold text-gray-800">Gym Check-in</h1>
           <p className="mt-2 text-gray-600">Welcome to our gym check-in system</p>
         </div>
 
