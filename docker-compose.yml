@@ -19,7 +19,7 @@ services:
       - "letsencrypt:/letsencrypt"
 
   app:
-    image: ghcr.io/shahidshabbir-se/remix-app:latest
+    image: ghcr.io/shahidshabbir-se/rfitness:latest
     secrets:
       - db-password
     environment:
