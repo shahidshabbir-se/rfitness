@@ -31,7 +31,7 @@ services:
       - POSTGRES_SSLMODE=disable
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app.rule=Host(`rfitness.duckdns.org`)"
+      - "traefik.http.routers.app.rule=Host(`checkin.rfitnessbelfast.com`)"
       - "traefik.http.routers.app.entrypoints=websecure"
       - "traefik.http.routers.app.tls.certresolver=letsencrypt"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
