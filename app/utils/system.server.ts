@@ -39,3 +39,15 @@ export function resetSystemStatus(): void {
   systemStatus.lastCheckIn = null;
   systemStatus.startupTime = new Date().toISOString();
 }
+
+// remove the below section after deployment check
+export async function getCheckInSystemStatus(): Promise<string> {
+  // Your logic to check system status
+  return 'ok'; // Example response
+}
+
+export async function getRecentActivity(): Promise<any[]> {
+  // Example: Fetch recent activity from the database
+  return [];
+}
+

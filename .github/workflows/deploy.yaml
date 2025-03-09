@@ -1,0 +1,56 @@
+name: Deploy rfitness
+
+on:
+  push:
+    branches:
+      - "main"
+
+permissions:
+  packages: write
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/engenlabs/rfitness:latest
+            ghcr.io/engenlabs/rfitness:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-push-image
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_ed25519
+          chmod 600 ~/.ssh/deploy_ed25519
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Deploy with Docker Stack
+        uses: cssnr/stack-deploy-action@v1
+        with:
+          name: rfitness
+          file: docker-compose.yml
+          host: ${{ secrets.SERVER_IP }}
+          user: ${{ secrets.SERVER_USER }}
+          ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}

@@ -1,0 +1,67 @@
+services:
+  traefik:
+    image: traefik:v3.3
+    container_name: traefik
+    restart: always
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=michael@rfitness.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpChallenge.entryPoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt"
+
+  app:
+    image: ghcr.io/engenlabs/rfitness:latest
+    secrets:
+      - db-password
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=app
+      - POSTGRES_PORT=5432
+      - POSTGRES_SSLMODE=disable
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`checkin.rfitnessbelfast.com`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls.certresolver=letsencrypt"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+    depends_on:
+      - db
+
+  db:
+    image: postgres
+    container_name: postgres-db
+    user: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    secrets:
+      - db-password
+    environment:
+      - POSTGRES_DB=app
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:
+  letsencrypt:
+
+secrets:
+  db-password:
+    external: true

@@ -11,7 +11,7 @@ export async function triggerWebhook(
     console.log(`[Webhook ${event}]`, data);
     return true;
   }
-  
+
   try {
     const response = await fetch(process.env.WEBHOOK_URL, {
       method: 'POST',
@@ -26,15 +26,20 @@ export async function triggerWebhook(
         data
       })
     });
-    
+
     if (!response.ok) {
       console.error(`Webhook error: ${response.status} ${response.statusText}`);
       return false;
     }
-    
+
     return true;
   } catch (error) {
     console.error('Error triggering webhook:', error);
     return false;
   }
+}
+
+// remove the below section after deployment check
+export async function getWebhookStatus(): Promise<string> {
+  return process.env.WEBHOOK_URL ? 'configured' : 'not-configured';
 }
