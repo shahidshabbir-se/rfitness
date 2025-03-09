@@ -28,8 +28,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/ENGENLabs/rfitness:latest
-            ghcr.io/ENGENLabs/rfitness:${{ github.sha }}
+            ghcr.io/engenlabs/rfitness:latest
+            ghcr.io/engenlabs/rfitness:${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest
