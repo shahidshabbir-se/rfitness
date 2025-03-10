@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique @db.VarChar(50)
+  password  String    @db.VarChar(255)
+  email     String    @unique @db.VarChar(100)
+  role      String    @default("staff") @db.VarChar(20)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  lastLogin DateTime? @db.Timestamptz(6)
+
+  checkIns       CheckIn[]
+  updatedConfigs Configuration[]
+}
+
+model Customer {
+  id             String  @id @db.VarChar(100)
+  name           String  @db.VarChar(255)
+  phoneNumber    String? @db.VarChar(20)
+  membershipType String? @db.VarChar(50)
+
+  checkIns CheckIn[]
+}
+
+model CheckIn {
+  id             Int      @id @default(autoincrement())
+  customerId     String
+  customerName   String?  @db.VarChar(255)
+  phoneNumber    String?  @db.VarChar(20)
+  checkInTime    DateTime @default(now()) @db.Timestamptz(6)
+  membershipType String?  @db.VarChar(50)
+  locationId     String?  @db.VarChar(100)
+  verifiedBy     Int?
+
+  verifiedUser User?    @relation(fields: [verifiedBy], references: [id], onDelete: NoAction)
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+model Configuration {
+  key         String   @id @db.VarChar(50)
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  updatedBy   Int?
+
+  updatedUser User? @relation(fields: [updatedBy], references: [id], onDelete: NoAction)
+}
+
+model SystemLog {
+  id        Int      @id @default(autoincrement())
+  timestamp DateTime @default(now()) @db.Timestamptz(6)
+  eventType String   @db.VarChar(50)
+  message   String
+  details   Json?
+  severity  String   @default("info") @db.VarChar(20)
+}
