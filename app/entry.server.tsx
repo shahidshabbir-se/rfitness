@@ -12,7 +12,15 @@ import { RemixServer } from "@remix-run/react";
 import { isbot } from "isbot";
 import { renderToPipeableStream } from "react-dom/server";
 
+// Add EventEmitter for SSE
+import { EventEmitter } from "events";
+
 const ABORT_DELAY = 5_000;
+
+// Create a global event emitter for SSE
+export const checkInEventEmitter = new EventEmitter();
+// Increase max listeners to avoid memory leak warnings
+checkInEventEmitter.setMaxListeners(100);
 
 export default function handleRequest(
   request: Request,
@@ -24,6 +32,12 @@ export default function handleRequest(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   loadContext: AppLoadContext
 ) {
+  // Handle SSE requests
+  const url = new URL(request.url);
+  if (url.pathname === "/api/sse") {
+    return handleSSE(request);
+  }
+
   return isbot(request.headers.get("user-agent") || "")
     ? handleBotRequest(
         request,
@@ -37,6 +51,38 @@ export default function handleRequest(
         responseHeaders,
         remixContext
       );
+}
+
+// Handle SSE connections
+function handleSSE(request: Request) {
+  const stream = new ReadableStream({
+    start(controller) {
+      // Send initial connection message
+      controller.enqueue(new TextEncoder().encode("event: connected\ndata: Connected to SSE\n\n"));
+      
+      // Function to handle check-in events
+      const checkInHandler = (data: any) => {
+        const eventData = `event: check-in\ndata: ${JSON.stringify(data)}\n\n`;
+        controller.enqueue(new TextEncoder().encode(eventData));
+      };
+      
+      // Listen for check-in events
+      checkInEventEmitter.on('check-in', checkInHandler);
+      
+      // Handle client disconnect
+      request.signal.addEventListener('abort', () => {
+        checkInEventEmitter.off('check-in', checkInHandler);
+      });
+    }
+  });
+  
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    }
+  });
 }
 
 function handleBotRequest(

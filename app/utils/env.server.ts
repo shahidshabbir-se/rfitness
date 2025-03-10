@@ -8,6 +8,7 @@ export function getEnv() {
     SQUARE_WEBHOOK_SIGNATURE_KEY: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY || '',
     SQUARE_LOCATION_ID: process.env.SQUARE_LOCATION_ID || '',
     NODE_ENV: process.env.NODE_ENV || 'development',
+    ENABLE_REAL_TIME_NOTIFICATIONS: process.env.ENABLE_REAL_TIME_NOTIFICATIONS || 'false',
   };
 }
 
