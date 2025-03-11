@@ -34,3 +34,42 @@ export interface SystemStatusData {
   };
   uptime: string;
 }
+
+// Database Models
+export interface User {
+  id: number;
+  name: string;
+  password: string;
+  email: string;
+  role: 'admin' | 'staff';
+  createdAt: Date;
+  lastLogin: Date | null;
+}
+
+export interface CheckIn {
+  id: number;
+  customerId: string;
+  customerName: string | null;
+  phoneNumber: string | null;
+  checkInTime: Date;
+  membershipType: string | null;
+  locationId: string | null;
+  verifiedBy: string | null;
+}
+
+export interface SystemLog {
+  id: number;
+  timestamp: Date;
+  eventType: string;
+  message: string;
+  details: any;
+  severity: 'info' | 'warning' | 'error';
+}
+
+export interface Configuration {
+  key: string;
+  value: any;
+  description: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}

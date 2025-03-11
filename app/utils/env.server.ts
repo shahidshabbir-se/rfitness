@@ -8,6 +8,8 @@ export function getEnv() {
     SQUARE_WEBHOOK_SIGNATURE_KEY: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY || '',
     SQUARE_LOCATION_ID: process.env.SQUARE_LOCATION_ID || '',
     NODE_ENV: process.env.NODE_ENV || 'development',
+    WEBHOOK_URL: process.env.WEBHOOK_URL || '',
+    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://admin:admin123@localhost:5432/postgres'
   };
 }
 
