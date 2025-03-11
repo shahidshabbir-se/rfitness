@@ -2,88 +2,53 @@ import { json, redirect, type LoaderFunctionArgs } from '@remix-run/node';
 import { useLoaderData, Link } from '@remix-run/react';
 import { useState, useEffect } from 'react';
 import { getEnv } from '~/utils/env.server';
-import type { CheckInRecord, WebhookStatus, Member, SystemStatus, AnalyticsData } from '~/types';
+import type { 
+  CheckInRecord, 
+  WebhookStatusData, 
+  Member, 
+  SystemStatusData, 
+  AnalyticsData,
+  RecentActivityData
+} from '~/types';
 import { getWebhookStatus } from '~/utils/webhook.server';
 import { requireAdmin } from '~/utils/session.server';
 import { getCheckInSystemStatus, getRecentActivity } from '~/utils/system.server';
 
+// Import database models
+import { getRecentCheckIns, getCheckInStats } from '~/models/check-in.server';
+import { getAllCustomers, getCustomerStats } from '~/models/customer.server';
+import { getSystemLogs } from '~/models/system-log.server';
+
 // Import refactored components
-import SystemStatus from '~/components/admin/SystemStatus';
+import SystemStatusComponent from '~/components/admin/SystemStatus';
 import CheckInSystemStatus from '~/components/admin/CheckInSystemStatus';
 import CheckInNotifications from '~/components/admin/CheckInNotifications';
 import AdminTabs from '~/components/admin/AdminTabs';
 import CheckInLog from '~/components/admin/CheckInLog';
 import MembershipStatus from '~/components/admin/MembershipStatus';
 import AnalyticsReports from '~/components/admin/AnalyticsReports';
-import WebhookStatus from '~/components/admin/WebhookStatus';
+import WebhookStatusComponent from '~/components/admin/WebhookStatus';
 import MembersTab from '~/components/admin/MembersTab';
 import RecentActivity from '~/components/admin/RecentActivity';
 
-// Mock data for demonstration - in a real app, this would come from a database
-const mockCheckIns: CheckInRecord[] = [
-  {
-    id: '1',
-    timestamp: new Date(Date.now() - 5 * 60000).toISOString(), // 5 minutes ago
-    customerName: 'James Wilson',
-    phoneNumber: '+44 770 123 4567',
-    success: true,
-    membershipType: 'Monthly Subscription (£25)',
-    message: 'Check-in successful (Subscription)',
-    nextPayment: '12 May 2024',
-    initials: 'JW'
-  },
-  // ... other mock check-ins
+// Mock data for analytics that we don't have real data for yet
+const mockPeakHours = [
+  { hour: '17:00-18:00', count: 23 },
+  { hour: '18:00-19:00', count: 31 },
+  { hour: '19:00-20:00', count: 27 },
+  { hour: '07:00-08:00', count: 19 },
+  { hour: '08:00-09:00', count: 15 }
 ];
 
-// Mock data for members
-const mockMembers: Member[] = [
-  {
-    id: '1',
-    name: 'James Wilson',
-    phoneNumber: '+44 770 123 4567',
-    membershipType: 'Monthly Subscription (£25)',
-    status: 'Active',
-    nextPayment: '12 May 2024',
-    lastCheckIn: '04/03/2025',
-    visitsThisMonth: 15,
-    initials: 'JW'
-  },
-  // ... other mock members
+const mockCheckInsByDay = [
+  { date: 'Mon', count: 42 },
+  { date: 'Tue', count: 38 },
+  { date: 'Wed', count: 45 },
+  { date: 'Thu', count: 39 },
+  { date: 'Fri', count: 48 },
+  { date: 'Sat', count: 52 },
+  { date: 'Sun', count: 30 }
 ];
-
-// Mock data for analytics
-const mockAnalytics: AnalyticsData = {
-  totalCheckIns: 127,
-  activeMembers: 84,
-  needsRenewal: 12,
-  peakHours: [
-    { hour: '17:00-18:00', count: 23 },
-    { hour: '18:00-19:00', count: 31 },
-    { hour: '19:00-20:00', count: 27 },
-    { hour: '07:00-08:00', count: 19 },
-    { hour: '08:00-09:00', count: 15 }
-  ],
-  topMembers: [
-    { name: 'David Wilson', checkIns: 24 },
-    { name: 'Emma Thompson', checkIns: 22 },
-    { name: 'James Brown', checkIns: 19 },
-    { name: 'Lisa Anderson', checkIns: 17 },
-    { name: 'Robert Davis', checkIns: 15 }
-  ],
-  checkInsByDay: [
-    { date: 'Mon', count: 42 },
-    { date: 'Tue', count: 38 },
-    { date: 'Wed', count: 45 },
-    { date: 'Thu', count: 39 },
-    { date: 'Fri', count: 48 },
-    { date: 'Sat', count: 52 },
-    { date: 'Sun', count: 30 }
-  ],
-  membershipTypes: [
-    { type: 'Monthly Subscription', count: 65 },
-    { type: 'Cash Payment', count: 25 }
-  ]
-};
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // Require admin authentication
@@ -93,20 +58,118 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const env = getEnv();
     
     // Get real webhook status
-    const webhookStatus = getWebhookStatus();
+    const webhookStatus: WebhookStatusData = getWebhookStatus();
     
     // Get check-in system status
-    const systemStatus = await getCheckInSystemStatus();
+    const systemStatus: SystemStatusData = await getCheckInSystemStatus();
     
-    // Get recent activity data
-    const recentActivity = await getRecentActivity();
+    // Get real data from database
+    const checkInsData = await getRecentCheckIns(1, 50);
+    const checkInStats = await getCheckInStats();
+    
+    // Get customer data
+    const customersData = await getAllCustomers(1, 100);
+    const customerStats = await getCustomerStats();
+    
+    // Get recent system logs for activity
+    const { logs: recentLogs } = await getSystemLogs({ 
+      page: 1, 
+      limit: 20,
+      eventType: 'check_in'
+    });
+    
+    // Transform database data to match expected formats
+    const checkIns: CheckInRecord[] = checkInsData.checkIns.map((checkIn: any) => ({
+      id: checkIn.id.toString(),
+      timestamp: checkIn.checkInTime.toISOString(),
+      customerName: checkIn.customerName || checkIn.customer.name,
+      phoneNumber: checkIn.phoneNumber || checkIn.customer.phoneNumber || '',
+      success: true, // All stored check-ins are successful
+      membershipType: checkIn.membershipType || checkIn.customer.membershipType || 'Unknown',
+      message: 'Check-in successful',
+      nextPayment: '', // We don't have this information yet
+      initials: (checkIn.customerName || checkIn.customer.name)
+        .split(' ')
+        .map((name: string) => name[0])
+        .join('')
+        .substring(0, 2)
+    }));
+    
+    const members: Member[] = customersData.customers.map((customer: any) => {
+      // Find the most recent check-in for this customer
+      const lastCheckIn = customer.checkIns && customer.checkIns.length > 0 
+        ? customer.checkIns[0].checkInTime 
+        : null;
+      
+      // Calculate visits this month
+      const visitsThisMonth = customer._count?.checkIns || 0;
+      
+      return {
+        id: customer.id,
+        name: customer.name,
+        phoneNumber: customer.phoneNumber || '',
+        membershipType: customer.membershipType || 'Unknown',
+        status: 'Active', // We don't have status information yet
+        nextPayment: '', // We don't have this information yet
+        lastCheckIn: lastCheckIn ? new Date(lastCheckIn).toLocaleDateString() : 'Never',
+        visitsThisMonth,
+        initials: customer.name
+          .split(' ')
+          .map((name: string) => name[0])
+          .join('')
+          .substring(0, 2)
+      };
+    });
+    
+    // Create analytics data from our stats
+    const analytics: AnalyticsData = {
+      totalCheckIns: checkInStats.total,
+      activeMembers: customerStats.activeCustomers,
+      needsRenewal: 0, // We don't have this information yet
+      
+      // We don't have this data yet, using mock data for now
+      peakHours: mockPeakHours,
+      
+      // Get top members by check-in count
+      topMembers: members
+        .sort((a, b) => b.visitsThisMonth - a.visitsThisMonth)
+        .slice(0, 5)
+        .map(member => ({
+          name: member.name,
+          checkIns: member.visitsThisMonth
+        })),
+      
+      // We don't have this data yet, using mock data for now
+      checkInsByDay: mockCheckInsByDay,
+      
+      // Use real membership type data
+      membershipTypes: customerStats.membershipTypes.map((type: any) => ({
+        type: type.type,
+        count: type.count
+      }))
+    };
+    
+    // Create recent activity data
+    const recentActivity: RecentActivityData = {
+      totalCheckIns: checkInStats.total,
+      activeMembers: customerStats.activeCustomers,
+      todayCheckIns: checkInStats.today,
+      lastUpdated: new Date().toISOString(),
+      recentLogs: recentLogs.map((log: any) => ({
+        id: log.id.toString(),
+        timestamp: log.timestamp.toISOString(),
+        message: log.message,
+        type: log.eventType,
+        details: log.details
+      }))
+    };
     
     return json({
       squareEnvironment: env.SQUARE_ENVIRONMENT,
       isConfigured: !!env.SQUARE_ACCESS_TOKEN,
-      checkIns: mockCheckIns,
-      members: mockMembers,
-      analytics: mockAnalytics,
+      checkIns,
+      members,
+      analytics,
       webhookStatus,
       systemStatus,
       recentActivity
@@ -118,26 +181,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return json({
       squareEnvironment: 'not configured',
       isConfigured: false,
-      checkIns: mockCheckIns,
-      members: mockMembers,
-      analytics: mockAnalytics,
+      checkIns: [] as CheckInRecord[],
+      members: [] as Member[],
+      analytics: {
+        totalCheckIns: 0,
+        activeMembers: 0,
+        needsRenewal: 0,
+        peakHours: mockPeakHours,
+        topMembers: [],
+        checkInsByDay: mockCheckInsByDay,
+        membershipTypes: []
+      } as AnalyticsData,
       webhookStatus: {
         status: 'error',
         message: 'Error fetching webhook status',
         lastReceived: null,
         signatureValid: false
-      },
+      } as WebhookStatusData,
       systemStatus: {
         status: 'degraded',
         url: 'unknown',
         lastChecked: new Date().toISOString()
-      },
+      } as SystemStatusData,
       recentActivity: {
         totalCheckIns: 0,
         activeMembers: 0,
         todayCheckIns: 0,
         lastUpdated: new Date().toISOString()
-      }
+      } as RecentActivityData
     });
   }
 }
@@ -201,8 +272,8 @@ export default function Admin() {
         };
         
         // Update both notifications and check-ins
-        setNotifications(prev => [newCheckIn, ...prev].slice(0, 5));
-        setCheckIns(prev => [newCheckIn, ...prev]);
+        setNotifications((prev: CheckInRecord[]) => [newCheckIn, ...prev].slice(0, 5));
+        setCheckIns((prev: CheckInRecord[]) => [newCheckIn, ...prev]);
       }
     }, 30000);
     
@@ -225,7 +296,7 @@ export default function Admin() {
       initials: 'SR'
     };
     
-    setCheckIns(prev => [refreshMessage, ...prev]);
+    setCheckIns((prev: CheckInRecord[]) => [refreshMessage, ...prev]);
   };
   
   return (
@@ -265,7 +336,7 @@ export default function Admin() {
           
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
             {/* Square API Status */}
-            <SystemStatus 
+            <SystemStatusComponent 
               squareEnvironment={squareEnvironment}
               isConfigured={isConfigured}
             />
@@ -273,12 +344,11 @@ export default function Admin() {
             {/* Check-in System Status */}
             <CheckInSystemStatus
               status={systemStatus.status}
-              url={systemStatus.url}
               lastChecked={systemStatus.lastChecked}
             />
             
             {/* Webhook Status */}
-            <WebhookStatus webhookStatus={webhookStatus} />
+            <WebhookStatusComponent webhookStatus={webhookStatus} />
             
             {/* Recent Activity */}
             <RecentActivity

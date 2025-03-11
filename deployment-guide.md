@@ -1,664 +1,270 @@
-# Gym Check-in System Deployment Guide
+# Deployment Guide for R-Fitness Gym Check-in System
 
-This guide provides step-by-step instructions for deploying the Gym Check-in System to a Vultr server. No code changes are required.
+This guide provides step-by-step instructions for deploying the R-Fitness Gym Check-in System to a production environment.
 
-## Table of Contents
-1. [Server Provisioning](#1-server-provisioning)
-2. [Initial Server Setup](#2-initial-server-setup)
-3. [Database Setup](#3-database-setup)
-4. [Application Deployment](#4-application-deployment)
-5. [Environment Configuration](#5-environment-configuration)
-6. [Running the Application](#6-running-the-application)
-7. [Setting Up Nginx as a Reverse Proxy](#7-setting-up-nginx-as-a-reverse-proxy)
-8. [SSL Configuration](#8-ssl-configuration)
-9. [Webhook Configuration](#9-webhook-configuration)
-10. [Post-Deployment Verification](#10-post-deployment-verification)
-11. [Maintenance and Monitoring](#11-maintenance-and-monitoring)
+## Prerequisites
 
-## 1. Server Provisioning
+Before deploying, ensure you have:
 
-### Recommended Vultr Configuration
-- **Server Type**: Cloud Compute
-- **CPU & Memory**: 2 vCPU, 4GB RAM minimum
-- **Storage**: 80GB SSD
-- **Operating System**: Ubuntu 22.04 LTS
-- **Location**: Choose a region closest to your gym's location
+1. A server or cloud instance running Linux (Ubuntu 20.04 LTS or newer recommended)
+2. Docker and Docker Compose installed
+3. Domain name configured with DNS pointing to your server
+4. Square Developer account with API credentials
+5. Basic knowledge of Docker, Nginx, and Linux server administration
 
-### Provisioning Steps
-1. Create a Vultr account if you don't have one
-2. Click "Deploy Server"
-3. Select the configuration above
-4. Set a strong root password or SSH key
-5. Deploy the server and note the IP address
+## Deployment Steps
 
-## 2. Initial Server Setup
+### 1. Prepare Your Environment
 
-SSH into your server:
+Clone the repository to your local machine:
 
 ```bash
-ssh root@YOUR_SERVER_IP
+git clone https://github.com/your-username/rfitness.git
+cd rfitness
 ```
 
-### Update System Packages
+### 2. Configure Environment Variables
 
-```bash
-apt update && apt upgrade -y
-```
-
-### Create a Non-Root User
-
-```bash
-adduser gymadmin
-usermod -aG sudo gymadmin
-```
-
-### Set Up Firewall
-
-```bash
-ufw allow OpenSSH
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw allow 5432/tcp  # PostgreSQL (only if remote access is needed)
-ufw enable
-```
-
-### Install Node.js (v20.x)
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-apt install -y nodejs
-```
-
-Verify installation:
-
-```bash
-node -v  # Should show v20.x.x
-npm -v   # Should show 10.x.x or higher
-```
-
-### Install PM2 (Process Manager)
-
-```bash
-npm install -g pm2
-```
-
-## 3. Database Setup
-
-### Install PostgreSQL
-
-```bash
-apt install -y postgresql postgresql-contrib
-```
-
-### Configure PostgreSQL
-
-```bash
-# Start and enable PostgreSQL service
-systemctl start postgresql
-systemctl enable postgresql
-```
-
-### Create Database and User
-
-```bash
-# Switch to postgres user
-sudo -u postgres psql
-```
-
-Inside PostgreSQL prompt, create database and user:
-
-```sql
-CREATE DATABASE gym_checkin;
-CREATE USER gym_user WITH ENCRYPTED PASSWORD 'your_secure_password';
-GRANT ALL PRIVILEGES ON DATABASE gym_checkin TO gym_user;
-\c gym_checkin
-
--- Users table for admin access
-CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
-  username VARCHAR(50) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  email VARCHAR(100) UNIQUE NOT NULL,
-  role VARCHAR(20) NOT NULL DEFAULT 'staff',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  last_login TIMESTAMP WITH TIME ZONE
-);
-
--- Check-ins table for member visits
-CREATE TABLE check_ins (
-  id SERIAL PRIMARY KEY,
-  customer_id VARCHAR(100) NOT NULL,
-  customer_name VARCHAR(255),
-  phone_number VARCHAR(20),
-  check_in_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  membership_type VARCHAR(50),
-  location_id VARCHAR(100),
-  verified_by VARCHAR(50) REFERENCES users(username)
-);
-
--- System logs for application events
-CREATE TABLE system_logs (
-  id SERIAL PRIMARY KEY,
-  timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  event_type VARCHAR(50) NOT NULL,
-  message TEXT NOT NULL,
-  details JSONB,
-  severity VARCHAR(20) DEFAULT 'info'
-);
-
--- Configuration table for system settings
-CREATE TABLE configuration (
-  key VARCHAR(50) PRIMARY KEY,
-  value JSONB NOT NULL,
-  description TEXT,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_by VARCHAR(50) REFERENCES users(username)
-);
-
--- Create initial admin user (password: admin123)
-INSERT INTO users (username, password_hash, email, role)
-VALUES ('admin', '$2b$10$rBEPBvzUVE7GWKtZQxK5V.r6HV0YvpEX9Egi9wxQAjOYd0i9f0qVm', 'admin@example.com', 'admin');
-
-\q
-```
-
-### Configure PostgreSQL for Remote Access (Optional)
-
-If you need to access PostgreSQL remotely (not recommended for production):
-
-```bash
-# Edit PostgreSQL configuration
-nano /etc/postgresql/14/main/postgresql.conf
-```
-
-Uncomment and modify:
-```
-listen_addresses = '*'
-```
-
-```bash
-# Edit client authentication configuration
-nano /etc/postgresql/14/main/pg_hba.conf
-```
-
-Add at the end:
-```
-host    all             all             0.0.0.0/0               md5
-```
-
-Restart PostgreSQL:
-```bash
-systemctl restart postgresql
-```
-
-## 4. Application Deployment
-
-### Create Application Directory
-
-```bash
-mkdir -p /var/www/gym-checkin
-chown gymadmin:gymadmin /var/www/gym-checkin
-```
-
-### Clone or Upload Application
-
-If using Git:
-
-```bash
-cd /var/www/gym-checkin
-git clone YOUR_REPOSITORY_URL .
-```
-
-Or upload your files using SCP:
-
-```bash
-# Run this from your local machine
-scp -r /path/to/local/project/* gymadmin@YOUR_SERVER_IP:/var/www/gym-checkin/
-```
-
-### Install Dependencies
-
-```bash
-cd /var/www/gym-checkin
-npm install --production
-```
-
-### Build the Application
-
-```bash
-cd /var/www/gym-checkin
-```
-
-If you encounter a "remix: not found" error when running `npm run build`, use one of these alternative build commands:
-
-```bash
-# Option 1: Use npx to run the locally installed remix CLI
-npx remix vite:build
-
-# Option 2: Use the direct path to the remix binary
-./node_modules/.bin/remix vite:build
-
-# Option 3: Install remix globally and then run the build
-npm install -g @remix-run/dev
-npm run build
-```
-
-Choose the option that works best for your environment. Option 1 or 2 is generally preferred as they use the locally installed version.
-
-## 5. Environment Configuration
-
-Create a `.env` file:
-
-```bash
-cd /var/www/gym-checkin
-cp .env.example .env
-nano .env
-```
-
-Add the following environment variables:
+Create a `.env.production` file in the root directory with the following variables:
 
 ```
-SQUARE_ACCESS_TOKEN=your_square_access_token
-SQUARE_ENVIRONMENT=production
-SQUARE_WEBHOOK_SIGNATURE_KEY=your_webhook_signature_key
-SQUARE_LOCATION_ID=your_location_id
-DATABASE_URL=postgresql://gym_user:your_secure_password@localhost:5432/gym_checkin
-WEBHOOK_URL=https://your-webhook-endpoint.com/webhook
 NODE_ENV=production
+SESSION_SECRET=your-secure-session-secret
+SQUARE_ACCESS_TOKEN=your-square-access-token
+SQUARE_LOCATION_ID=your-square-location-id
+SQUARE_ENVIRONMENT=production
+SQUARE_WEBHOOK_SIGNATURE_KEY=your-webhook-signature-key
+SQUARE_WEBHOOK_URL=https://checkin.rfitnessbelfast.com/api/webhook
+DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/rfitness
 ```
 
-Save and exit (Ctrl+X, then Y, then Enter).
+### 3. Set Up Docker Secrets
 
-Set proper permissions:
+Create a secure password for the PostgreSQL database:
 
 ```bash
-chmod 640 /var/www/gym-checkin/.env
-chown gymadmin:gymadmin /var/www/gym-checkin/.env
+echo "your-secure-db-password" | docker secret create postgres_password -
 ```
 
-## 6. Running the Application
+### 4. Initialize Docker Swarm
 
-### Create PM2 Configuration
-
-Create a file named `ecosystem.config.js`:
+If not already initialized, set up Docker Swarm:
 
 ```bash
-cd /var/www/gym-checkin
-nano ecosystem.config.js
+docker swarm init --advertise-addr <YOUR-SERVER-IP>
 ```
 
-Add the following content:
+### 5. Build and Deploy the Application
 
-```javascript
-module.exports = {
-  apps: [{
-    name: "gym-checkin",
-    script: "npm",
-    args: "start",
-    env: {
-      NODE_ENV: "production",
-    },
-    max_memory_restart: "500M",
-    log_date_format: "YYYY-MM-DD HH:mm:ss",
-    error_file: "/var/log/gym-checkin/error.log",
-    out_file: "/var/log/gym-checkin/out.log"
-  }]
-};
-```
-
-Create log directory:
+Deploy the application stack:
 
 ```bash
-mkdir -p /var/log/gym-checkin
-chown gymadmin:gymadmin /var/log/gym-checkin
+docker stack deploy -c docker-stack.yaml rfitness
 ```
 
-### Start the Application
+### 6. Verify Deployment
+
+Check that all services are running:
 
 ```bash
-cd /var/www/gym-checkin
-pm2 start ecosystem.config.js
+docker service ls
 ```
 
-#### Handling ES Module Compatibility Issues
+You should see three services running:
+- `rfitness_traefik`: The reverse proxy
+- `rfitness_app`: The application
+- `rfitness_db`: The PostgreSQL database
 
-If you encounter an error like `Error [ERR_REQUIRE_ESM]` when starting PM2, this is because your project is set up as an ES Module (with `"type": "module"` in package.json), but PM2 uses CommonJS to load configuration files.
+### 7. Run Database Migrations
 
-You have three options to fix this:
-
-1. **Rename your ecosystem config file to use the `.cjs` extension:**
+Execute Prisma migrations to set up the database schema:
 
 ```bash
-mv ecosystem.config.js ecosystem.config.cjs
-pm2 start ecosystem.config.cjs
+docker exec $(docker ps -q -f name=rfitness_app) npx prisma migrate deploy
 ```
 
-2. **Create a new ecosystem config file with the `.cjs` extension:**
+### 8. Set Up SSL with Let's Encrypt
+
+The Traefik service is configured to automatically obtain and renew SSL certificates from Let's Encrypt. Ensure your domain is correctly pointed to your server's IP address.
+
+### 9. Configure Square Webhooks
+
+1. Log in to your [Square Developer Dashboard](https://developer.squareup.com/apps)
+2. Select your application
+3. Navigate to the Webhooks section
+4. Add a webhook subscription with the URL: `https://checkin.rfitnessbelfast.com/api/webhook`
+5. Subscribe to the following event types:
+   - `customer.created`
+   - `customer.updated`
+   - `customer.deleted`
+   - `subscription.created`
+   - `subscription.updated`
+   - `subscription.canceled`
+6. Copy the Webhook Signature Key provided by Square
+7. Update your `.env.production` file with the `SQUARE_WEBHOOK_SIGNATURE_KEY` value
+
+### 10. Verify the Application
+
+Open your browser and navigate to `https://checkin.rfitnessbelfast.com`. You should see the R-Fitness Gym Check-in System login page.
+
+## Database Management
+
+### Accessing the Database
+
+To connect to the PostgreSQL database:
 
 ```bash
-cat > ecosystem.config.cjs << 'EOL'
-module.exports = {
-  apps: [{
-    name: "gym-checkin",
-    script: "npm",
-    args: "start",
-    env: {
-      NODE_ENV: "production",
-    },
-    max_memory_restart: "500M",
-    log_date_format: "YYYY-MM-DD HH:mm:ss",
-    error_file: "/var/log/gym-checkin/error.log",
-    out_file: "/var/log/gym-checkin/out.log"
-  }]
-};
-EOL
-
-pm2 start ecosystem.config.cjs
+docker exec -it $(docker ps -q -f name=rfitness_db) psql -U postgres -d rfitness
 ```
 
-3. **Start your application directly with PM2:**
+### Backup and Restore
+
+To backup the database:
 
 ```bash
-pm2 start npm --name "gym-checkin" -- start
+docker exec -t $(docker ps -q -f name=rfitness_db) pg_dump -U postgres rfitness > backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
-The first option (renaming to .cjs) is the cleanest solution as it maintains your ES Module setup while making the PM2 config compatible with CommonJS.
-
-### Configure PM2 to Start on Boot
+To restore from a backup:
 
 ```bash
-pm2 startup
-# Follow the instructions provided by the command
-pm2 save
+cat backup_file.sql | docker exec -i $(docker ps -q -f name=rfitness_db) psql -U postgres -d rfitness
 ```
 
-## 7. Setting Up Nginx as a Reverse Proxy
+## Monitoring and Logging
 
-### Install Nginx
+### Viewing Application Logs
 
 ```bash
-apt install -y nginx
+docker service logs rfitness_app
 ```
 
-### Configure Nginx
+### Viewing Database Logs
 
 ```bash
-nano /etc/nginx/sites-available/gym-checkin
+docker service logs rfitness_db
 ```
 
-Add the following configuration:
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com www.your-domain.com;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Increase max body size for webhook payloads
-    client_max_body_size 10M;
-}
-```
-
-Enable the site:
+### Viewing Traefik Logs
 
 ```bash
-ln -s /etc/nginx/sites-available/gym-checkin /etc/nginx/sites-enabled/
-nginx -t  # Test configuration
-systemctl restart nginx
+docker service logs rfitness_traefik
 ```
 
-## 8. SSL Configuration
+### Monitoring System Status
 
-### Install Certbot
+The application includes a built-in monitoring dashboard accessible at `https://checkin.rfitnessbelfast.com/admin`. This dashboard provides:
 
-```bash
-apt install -y certbot python3-certbot-nginx
-```
+1. Recent check-ins
+2. System logs
+3. Webhook status
+4. Database connection status
+5. Analytics data
 
-### Obtain SSL Certificate
+## Updating the Application
 
-```bash
-certbot --nginx -d your-domain.com -d www.your-domain.com
-```
+To update the application to a new version:
 
-Follow the prompts to complete the SSL setup.
-
-### Auto-renewal
-
-Certbot sets up auto-renewal by default. Verify with:
-
-```bash
-systemctl status certbot.timer
-```
-
-## 9. Webhook Configuration
-
-### Configure Square Webhooks
-
-1. Log in to your Square Developer Dashboard
-2. Navigate to your application
-3. Go to the Webhooks section
-4. Add a webhook endpoint: `https://your-domain.com/webhook`
-5. Select the event types you want to subscribe to
-6. Copy the Signature Key and update your `.env` file:
-
-```bash
-nano /var/www/gym-checkin/.env
-# Update SQUARE_WEBHOOK_SIGNATURE_KEY
-```
-
-Restart the application:
-
-```bash
-pm2 restart gym-checkin
-```
-
-## 10. Post-Deployment Verification
-
-### Verify Application Status
-
-```bash
-pm2 status
-```
-
-### Check Application Logs
-
-```bash
-pm2 logs gym-checkin
-```
-
-### Test Square API Connection
-
-Visit `https://your-domain.com/admin` and check the System Status tab.
-
-### Test Check-in Flow
-
-1. Visit `https://your-domain.com/check-in`
-2. Enter a valid phone number
-3. Verify the check-in process works correctly
-
-### Verify Webhook Reception
-
-1. Perform a check-in
-2. Check the application logs for webhook events:
+1. Pull the latest changes:
    ```bash
-   grep "webhook" /var/log/gym-checkin/out.log
+   git pull origin main
    ```
 
-### Verify Database Connection
+2. Rebuild and redeploy:
+   ```bash
+   docker build -t rfitness:latest .
+   docker stack deploy -c docker-stack.yaml rfitness
+   ```
 
-Connect to the PostgreSQL database and check for new records:
-
-```bash
-sudo -u postgres psql -d gym_checkin -c "SELECT * FROM check_ins ORDER BY check_in_time DESC LIMIT 5;"
-```
-
-## 11. Maintenance and Monitoring
-
-### Regular Backups
-
-Set up a daily backup of your PostgreSQL database:
-
-```bash
-nano /etc/cron.daily/backup-gym-db
-```
-
-Add the following content:
-
-```bash
-#!/bin/bash
-TIMESTAMP=$(date +"%Y%m%d")
-BACKUP_DIR="/var/backups/gym-checkin"
-mkdir -p $BACKUP_DIR
-
-# Backup PostgreSQL database
-export PGPASSWORD="your_secure_password"
-pg_dump -h localhost -U gym_user gym_checkin > "$BACKUP_DIR/gym-$TIMESTAMP.sql"
-unset PGPASSWORD
-
-# Compress the backup
-gzip "$BACKUP_DIR/gym-$TIMESTAMP.sql"
-
-# Delete backups older than 30 days
-find $BACKUP_DIR -name "gym-*.sql.gz" -mtime +30 -delete
-```
-
-Make it executable:
-
-```bash
-chmod +x /etc/cron.daily/backup-gym-db
-```
-
-### Monitoring with PM2
-
-View real-time metrics:
-
-```bash
-pm2 monit
-```
-
-### Database Maintenance
-
-Set up regular PostgreSQL maintenance:
-
-```bash
-nano /etc/cron.weekly/postgres-maintenance
-```
-
-Add the following content:
-
-```bash
-#!/bin/bash
-# Run VACUUM ANALYZE to optimize database performance
-sudo -u postgres psql -d gym_checkin -c "VACUUM ANALYZE;"
-```
-
-Make it executable:
-
-```bash
-chmod +x /etc/cron.weekly/postgres-maintenance
-```
-
-### Log Rotation
-
-Configure log rotation:
-
-```bash
-nano /etc/logrotate.d/gym-checkin
-```
-
-Add the following:
-
-```
-/var/log/gym-checkin/*.log {
-    daily
-    missingok
-    rotate 14
-    compress
-    delaycompress
-    notifempty
-    create 0640 gymadmin gymadmin
-    sharedscripts
-    postrotate
-        pm2 reloadLogs
-    endscript
-}
-```
+3. Run any new migrations:
+   ```bash
+   docker exec $(docker ps -q -f name=rfitness_app) npx prisma migrate deploy
+   ```
 
 ## Troubleshooting
 
-### Application Won't Start
+### Database Connection Issues
 
-Check logs:
+If the application cannot connect to the database:
+
+1. Check that the database service is running:
+   ```bash
+   docker service ps rfitness_db
+   ```
+
+2. Verify the database URL in the environment variables:
+   ```bash
+   docker exec $(docker ps -q -f name=rfitness_app) printenv | grep DATABASE_URL
+   ```
+
+3. Check database logs for errors:
+   ```bash
+   docker service logs rfitness_db
+   ```
+
+### Square API Connection Issues
+
+If the application cannot connect to Square API:
+
+1. Verify your Square API credentials in the environment variables:
+   ```bash
+   docker exec $(docker ps -q -f name=rfitness_app) printenv | grep SQUARE
+   ```
+
+2. Check application logs for Square API errors:
+   ```bash
+   docker service logs rfitness_app | grep "Square API"
+   ```
+
+3. Verify webhook configuration in the Square Developer Dashboard
+
+### Webhook Issues
+
+If webhooks are not being received or processed:
+
+1. Check that the webhook URL is correctly configured in Square Developer Dashboard
+2. Verify the webhook signature key is correctly set in your environment variables
+3. Check application logs for webhook-related errors:
+   ```bash
+   docker service logs rfitness_app | grep "webhook"
+   ```
+4. Ensure your domain is correctly pointed to your server and SSL is properly configured
+
+### SSL Certificate Issues
+
+If Traefik fails to obtain SSL certificates:
+
+1. Ensure your domain is correctly pointed to your server's IP address
+2. Check Traefik logs for Let's Encrypt errors:
+   ```bash
+   docker service logs rfitness_traefik | grep "Let's Encrypt"
+   ```
+
+3. Verify that ports 80 and 443 are open on your server's firewall
+
+## Scaling the Application
+
+To scale the application horizontally:
+
 ```bash
-pm2 logs gym-checkin
+docker service scale rfitness_app=3
 ```
 
-Verify environment variables:
-```bash
-cat /var/www/gym-checkin/.env
-```
+This will run three instances of the application container, with Traefik automatically load balancing between them.
 
-### Database Issues
+## Security Considerations
 
-Check PostgreSQL service status:
-```bash
-systemctl status postgresql
-```
+1. Keep your server and Docker up to date with security patches
+2. Regularly rotate your Square API credentials and database passwords
+3. Enable firewall rules to restrict access to only necessary ports
+4. Set up regular database backups
+5. Monitor system logs for suspicious activity
+6. Use strong, unique passwords for all services
 
-Verify database connection:
-```bash
-sudo -u postgres psql -d gym_checkin -c "SELECT 1;"
-```
+## Additional Resources
 
-Check database logs:
-```bash
-tail -f /var/log/postgresql/postgresql-14-main.log
-```
-
-### Nginx Issues
-
-Check Nginx status:
-```bash
-systemctl status nginx
-```
-
-Check Nginx error logs:
-```bash
-tail -f /var/log/nginx/error.log
-```
-
-### SSL Issues
-
-Verify certificate:
-```bash
-certbot certificates
-```
-
-Test SSL configuration:
-```bash
-curl -vI https://your-domain.com
-```
-
-## Conclusion
-
-Your Gym Check-in System should now be successfully deployed on your Vultr server with PostgreSQL as the database. If you encounter any issues during deployment, refer to the troubleshooting section or check the application logs for more detailed error messages.
-
-For ongoing maintenance, regularly:
-- Monitor system performance
-- Check application logs
-- Update your server's security patches
-- Backup your database
-- Perform PostgreSQL maintenance tasks
-- Renew your SSL certificate (automatic with Certbot)
+- [Docker Documentation](https://docs.docker.com/)
+- [Traefik Documentation](https://doc.traefik.io/traefik/)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
+- [Square API Documentation](https://developer.squareup.com/docs)
+- [Prisma Documentation](https://www.prisma.io/docs/)

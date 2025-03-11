@@ -1,4 +1,5 @@
 import { getEnv } from './env.server';
+import type { WebhookStatusData } from '~/types';
 
 type WebhookEvent = 'check-in' | 'error' | 'system-status';
 
@@ -6,14 +7,15 @@ export async function triggerWebhook(
   event: WebhookEvent,
   data: Record<string, any>
 ): Promise<boolean> {
+  const env = getEnv();
   // In development or if no webhook URL is configured, just log and return
-  if (!process.env.WEBHOOK_URL) {
+  if (!env.WEBHOOK_URL) {
     console.log(`[Webhook ${event}]`, data);
     return true;
   }
 
   try {
-    const response = await fetch(process.env.WEBHOOK_URL, {
+    const response = await fetch(env.WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -39,7 +41,18 @@ export async function triggerWebhook(
   }
 }
 
-// remove the below section after deployment check
-export async function getWebhookStatus(): Promise<string> {
-  return process.env.WEBHOOK_URL ? 'configured' : 'not-configured';
+// Get webhook status for admin dashboard
+export function getWebhookStatus(): WebhookStatusData {
+  const env = getEnv();
+  const webhookUrl = env.WEBHOOK_URL;
+  const isConfigured = Boolean(webhookUrl && webhookUrl.length > 0);
+  
+  return {
+    status: isConfigured ? 'configured' : 'not_configured',
+    message: isConfigured 
+      ? `Webhook configured at ${webhookUrl}` 
+      : 'Webhook not configured',
+    lastReceived: null, // We don't track this yet
+    signatureValid: isConfigured // Assume valid if configured
+  };
 }
