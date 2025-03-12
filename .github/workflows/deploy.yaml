@@ -64,7 +64,7 @@ jobs:
         run: |
           npx prisma migrate deploy
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: "postgresql://postgres:${{ secrets.DATABASE_PASSWORD }}@127.0.0.1:5432/app?schema=public"
 
       - name: Deploy with Docker Stack
         uses: cssnr/stack-deploy-action@v1
