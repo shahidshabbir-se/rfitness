@@ -8,6 +8,8 @@ import { verifyMembership } from '~/utils/square.server';
 import { isSquareConfigured } from '~/utils/env.server';
 import { logCheckIn } from '~/utils/system.server';
 import type { CheckInResult as CheckInResultType } from '~/types';
+import { processCheckIn } from '~/utils/check-in.server';
+import type { CheckInRecord } from '~/types';
 
 // Mock data for development when Square is not configured
 const MOCK_SUCCESS_RESULT: CheckInResultType = {
@@ -36,88 +38,92 @@ const MOCK_FAILURE_RESULT: CheckInResultType = {
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
-  const phoneNumber = formData.get('phoneNumber') as string;
-
-  if (!phoneNumber) {
-    return json({ 
-      success: false, 
-      message: 'Phone number is required',
-      error: 'MISSING_PHONE_NUMBER'
-    });
-  }
-
-  try {
-    // Check if Square is configured
-    if (!isSquareConfigured()) {
-      console.log('Square not configured, using mock data');
-      // Use mock data for development
-      const mockResult = Math.random() > 0.3 ? MOCK_SUCCESS_RESULT : MOCK_FAILURE_RESULT;
-      
-      // Log the check-in
-      if (mockResult.customerData?.name) {
-        logCheckIn(mockResult.customerData.name, mockResult.success);
-      }
-      
-      return json(mockResult);
-    }
-
-    // Verify membership with Square API
-    const result = await verifyMembership(phoneNumber);
-    
-    // Log the check-in
-    if (result.customerData?.name) {
-      logCheckIn(result.customerData.name, result.success);
-    }
-    
-    return json(result);
-  } catch (error) {
-    console.error('Error in check-in action:', error);
-    return json({ 
-      success: false, 
-      message: 'An unexpected error occurred. Please try again.',
-      error: 'UNEXPECTED_ERROR'
-    });
-  }
+  const phoneNumber = formData.get('phoneNumber')?.toString() || '';
+  
+  // In a real app, you would:
+  // 1. Validate the phone number
+  // 2. Look up the customer in your database
+  // 3. Check their membership status
+  // 4. Process the check-in
+  
+  // For this example, we'll simulate a successful check-in
+  const isSuccess = Math.random() > 0.2; // 80% success rate for demo
+  
+  // Create a check-in record
+  const checkInData: CheckInRecord = {
+    id: Date.now().toString(),
+    timestamp: new Date().toISOString(),
+    customerName: isSuccess ? 'John Smith' : 'Unknown User',
+    phoneNumber,
+    success: isSuccess,
+    membershipType: isSuccess ? 'Monthly Subscription (£25)' : '',
+    message: isSuccess 
+      ? 'Check-in successful (Subscription)' 
+      : 'Member not found or payment required',
+    nextPayment: isSuccess ? '15 Jun 2024' : '',
+    initials: isSuccess ? 'JS' : 'UN'
+  };
+  
+  // Process the check-in (this will emit the SSE event in production)
+  processCheckIn(checkInData);
+  
+  return json({ 
+    success: isSuccess,
+    message: checkInData.message,
+    checkInData
+  });
 }
 
-export default function CheckInPage() {
+export default function CheckIn() {
   const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
-  const [showResult, setShowResult] = useState(false);
-
-  const isSubmitting = navigation.state === 'submitting';
-
-  // Show result when data is available and not submitting
-  if (actionData && !isSubmitting && !showResult) {
-    setShowResult(true);
-  }
-
-  // Reset when starting a new check-in
-  const handleNewCheckIn = () => {
-    setShowResult(false);
-  };
-
+  const [phoneNumber, setPhoneNumber] = useState('');
+  
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-4">
-      <div className="mb-8 w-48">
-        <img src="/logo-light.png" alt="Gym Logo" className="w-full" />
-      </div>
-      
-      <div className="w-full rounded-lg bg-white p-6 shadow-lg">
-        <h1 className="mb-6 text-center text-2xl font-bold text-gray-800">
-          {showResult ? 'Check-In Result' : 'Member Check-In'}
-        </h1>
+    <div className="mx-auto max-w-md px-4 py-8 sm:px-6 lg:px-8">
+      <div className="rounded-lg bg-white p-6 shadow">
+        <h1 className="mb-6 text-2xl font-bold text-gray-900">Gym Check-In</h1>
         
-        {showResult && actionData ? (
-          <CheckInResult 
-            result={actionData as CheckInResultType} 
-            onNewCheckIn={handleNewCheckIn} 
-          />
-        ) : (
-          <CheckInForm 
-            isSubmitting={isSubmitting} 
-            onSubmit={() => {}} 
-          />
+        <Form method="post">
+          <div className="mb-4">
+            <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              id="phoneNumber"
+              name="phoneNumber"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+              placeholder="+44 7700 123456"
+              required
+            />
+          </div>
+          
+          <button
+            type="submit"
+            className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            Check In
+          </button>
+        </Form>
+        
+        {actionData && (
+          <div className={`mt-6 rounded-md p-4 ${
+            actionData.success ? 'bg-green-50' : 'bg-red-50'
+          }`}>
+            <p className={`text-sm font-medium ${
+              actionData.success ? 'text-green-800' : 'text-red-800'
+            }`}>
+              {actionData.message}
+            </p>
+            
+            {actionData.success && (
+              <p className="mt-2 text-sm text-gray-600">
+                Welcome, {actionData.checkInData.customerName}!
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>

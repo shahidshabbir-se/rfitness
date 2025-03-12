@@ -209,6 +209,43 @@ See [API.md](API.md) for detailed information on Square API integration.
    - Analytics Reports: Usage statistics and trends
    - Webhook Status: Monitor incoming webhook events from Square
 
+## Real-Time Check-In Notifications
+
+The system supports real-time check-in notifications to the admin dashboard using Server-Sent Events (SSE). This allows administrators to see new check-ins as they happen without needing to refresh the page.
+
+### How It Works
+
+1. When a member checks in, the system processes the check-in and emits an event
+2. The admin dashboard listens for these events via an SSE connection
+3. When a new check-in occurs, the dashboard automatically updates to show the new check-in
+
+### Configuration
+
+Real-time notifications are enabled by default in production. You can control this behavior with the `ENABLE_REAL_TIME_NOTIFICATIONS` environment variable:
+
+```
+ENABLE_REAL_TIME_NOTIFICATIONS=true
+```
+
+### Testing Real-Time Notifications
+
+To test real-time notifications:
+
+1. Open two browser windows
+2. In the first window, navigate to the admin dashboard (`/admin`)
+3. In the second window, navigate to the check-in page (`/check-in`)
+4. Perform a check-in in the second window
+5. Observe the real-time notification appearing in the admin dashboard
+
+### Troubleshooting
+
+If real-time notifications are not working:
+
+1. Check that `ENABLE_REAL_TIME_NOTIFICATIONS` is set to `true` in your environment
+2. Verify that your server supports SSE (most modern servers do)
+3. Check the browser console for any connection errors
+4. Ensure there are no firewall or proxy issues blocking the SSE connection
+
 ## Code Structure
 
 The project follows the Remix framework structure with some custom organization:

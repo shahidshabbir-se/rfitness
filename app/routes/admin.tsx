@@ -158,8 +158,57 @@ export default function Admin() {
   const [notifications, setNotifications] = useState<CheckInRecord[]>([]);
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>(initialCheckIns);
   
-  // Simulate receiving real-time check-ins
+  // Set up SSE connection for real-time notifications
   useEffect(() => {
+    // Create EventSource for SSE
+    const eventSource = new EventSource('/api/sse');
+    
+    // Handle connection open
+    eventSource.onopen = () => {
+      console.log('SSE connection established');
+    };
+    
+    // Handle check-in events
+    eventSource.addEventListener('check-in', (event) => {
+      try {
+        const checkInData = JSON.parse(event.data);
+        console.log('Received check-in via SSE:', checkInData);
+        
+        // Update notifications and check-ins
+        setNotifications(prev => [checkInData, ...prev].slice(0, 5));
+        setCheckIns(prev => [checkInData, ...prev]);
+      } catch (error) {
+        console.error('Error processing SSE check-in event:', error);
+      }
+    });
+    
+    // Handle errors
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      // Attempt to reconnect after a delay
+      setTimeout(() => {
+        eventSource.close();
+        // The browser will automatically attempt to reconnect
+      }, 5000);
+    };
+    
+    // Clean up on unmount
+    return () => {
+      console.log('Closing SSE connection');
+      eventSource.close();
+    };
+  }, []);
+  
+  // For development/testing only - simulate check-ins if needed
+  // This can be removed in production or controlled via env variable
+  useEffect(() => {
+    // Check if we should use simulated data (for development/testing)
+    const isSimulated = squareEnvironment === 'sandbox' && 
+                        window.location.hostname === 'localhost';
+    
+    if (!isSimulated) return;
+    
+    console.log('Using simulated check-ins for development');
     const interval = setInterval(() => {
       // Simulate a new check-in every 30 seconds
       if (Math.random() > 0.5) {
@@ -207,7 +256,7 @@ export default function Admin() {
     }, 30000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [squareEnvironment]);
   
   // Function to manually refresh check-ins
   const handleManualRefresh = () => {
