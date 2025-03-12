@@ -3,7 +3,7 @@ name: Deploy rfitness
 on:
   push:
     branches:
-      - "main"
+      - "my-prod"
 
 permissions:
   packages: write
@@ -42,6 +42,21 @@ jobs:
       - name: create env file
         run: |
           echo "GIT_COMMIT_HASH=${{ github.sha }}" >> ./envfile
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+      - name: Install dependencies
+        run: npm install
+
+      - name: Setup SSH Tunnel
+        run: |
+          ssh -o StrictHostKeyChecking=no -N -L 5432:${{ secrets.DATABASE_HOST }}:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} -i ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} &
+
+      - name: Apply Prisma Migrations
+        run: |
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Deploy with Docker Stack
         uses: cssnr/stack-deploy-action@v1
