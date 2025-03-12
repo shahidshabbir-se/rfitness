@@ -56,13 +56,9 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Setup SSH Tunnel with Retry
+      - name: Setup SSH Tunnel
         run: |
-          until ssh -N -L 5432:${{ secrets.DATABASE_HOST }}:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} -i ~/.ssh/deploy_key; do
-            echo "Retrying SSH tunnel setup..."
-            sleep 5
-          done
-        continue-on-error: false
+          ssh -N -L 5432:localhost:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} -i ~/.ssh/deploy_key &
 
       - name: Apply Prisma Migrations
         run: |
