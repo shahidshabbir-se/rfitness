@@ -20,6 +20,7 @@
     "@remix-run/node": "^2.8.0",
     "@remix-run/react": "^2.8.0",
     "@remix-run/serve": "^2.8.0",
+    "autoprefixer": "10.4.21",
     "bcryptjs": "^2.4.3",
     "isbot": "^4.4.0",
     "react": "^18.2.0",
