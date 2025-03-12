@@ -54,7 +54,7 @@ jobs:
         uses: cssnr/stack-deploy-action@v1
         with:
           name: rfitness
-          file: docker-stack.yml
+          file: docker-stack.yaml
           host: ${{ secrets.SERVER_IP }}
           user: ${{ secrets.SERVER_USER }}
           ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
