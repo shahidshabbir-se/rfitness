@@ -3,9 +3,10 @@ import type { Member } from '~/types';
 
 interface MembersTabProps {
   members: Member[];
+  onRefresh?: () => void; // Add optional onRefresh prop
 }
 
-export default function MembersTab({ members }: MembersTabProps) {
+export default function MembersTab({ members, onRefresh }: MembersTabProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all'); // 'all', 'active', 'inactive'
   const [currentPage, setCurrentPage] = useState(1);
@@ -37,7 +38,17 @@ export default function MembersTab({ members }: MembersTabProps) {
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-semibold text-gray-800">Members</h2>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-gray-800">Members</h2>
+        {onRefresh && (
+          <button 
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            onClick={onRefresh}
+          >
+            Refresh Members
+          </button>
+        )}
+      </div>
       
       {/* Search and Filter */}
       <div className="mb-6">
@@ -64,48 +75,33 @@ export default function MembersTab({ members }: MembersTabProps) {
           {/* Filter Buttons */}
           <div className="flex space-x-2">
             <button
-              onClick={() => {
-                setFilter('all');
-                setCurrentPage(1); // Reset to first page on filter change
-              }}
               className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                filter === 'all'
-                  ? 'bg-blue-600 text-white'
+                filter === 'all' 
+                  ? 'bg-blue-600 text-white' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
+              onClick={() => setFilter('all')}
             >
               All
             </button>
             <button
-              onClick={() => {
-                setFilter('active');
-                setCurrentPage(1); // Reset to first page on filter change
-              }}
-              className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
-                filter === 'active'
-                  ? 'bg-blue-600 text-white'
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                filter === 'active' 
+                  ? 'bg-blue-600 text-white' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
+              onClick={() => setFilter('active')}
             >
-              <svg className="mr-1.5 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-              </svg>
               Active
             </button>
             <button
-              onClick={() => {
-                setFilter('inactive');
-                setCurrentPage(1); // Reset to first page on filter change
-              }}
-              className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
-                filter === 'inactive'
-                  ? 'bg-blue-600 text-white'
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                filter === 'inactive' 
+                  ? 'bg-blue-600 text-white' 
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
+              onClick={() => setFilter('inactive')}
             >
-              <svg className="mr-1.5 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M11 6a3 3 0 11-6 0 3 3 0 016 0zM14 17a6 6 0 00-12 0h12z" />
-              </svg>
               Inactive
             </button>
           </div>

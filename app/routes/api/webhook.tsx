@@ -3,6 +3,7 @@ import type { ActionFunctionArgs } from '@remix-run/node';
 import { createSystemLog } from '~/models/system-log.server';
 import { updateSquareApiStatus, logSystemError } from '~/utils/system.server';
 import { getEnv } from '~/utils/env.server';
+import { emitWebhookEvent } from '~/utils/sse.server';
 import crypto from 'crypto';
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -123,6 +124,15 @@ async function handleCustomerEvent(payload: any) {
       }
     });
     
+    // Emit real-time event for admin dashboard
+    emitWebhookEvent('customer-update', {
+      eventType: payload.type,
+      customerId: data.id,
+      customerName: `${data.given_name || ''} ${data.family_name || ''}`.trim(),
+      phoneNumber: data.phone_number,
+      email: data.email_address
+    });
+    
     // TODO: Update customer in database
     // This would call customer.server.ts methods
   } catch (error) {
@@ -146,6 +156,15 @@ async function handleSubscriptionEvent(payload: any) {
         status: data.status,
         timestamp: new Date().toISOString()
       }
+    });
+    
+    // Emit real-time event for admin dashboard
+    emitWebhookEvent('subscription-update', {
+      eventType: payload.type,
+      subscriptionId: data.id,
+      customerId: data.customer_id,
+      planId: data.plan_id,
+      status: data.status
     });
     
     // TODO: Update subscription in database

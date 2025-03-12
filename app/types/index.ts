@@ -122,3 +122,13 @@ export interface Configuration {
   updatedAt: Date;
   updatedBy: string | null;
 }
+
+// SSE-related types
+export interface SSEEvent {
+  event: string;
+  data: any;
+}
+
+export interface CheckInEventData extends CheckInRecord {
+  // Additional fields specific to check-in events can be added here
+}

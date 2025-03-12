@@ -29,6 +29,43 @@ This document summarizes the changes made to enhance the R-Fitness Gym Check-in 
    - Implemented key-value storage for application settings
    - Added retrieval and update operations
 
+## Real-time Features
+
+1. **Server-Sent Events (SSE) Implementation**
+   - Created a robust event emitter system for real-time notifications
+   - Implemented proper connection management and cleanup
+   - Added ping events to keep connections alive
+
+2. **Check-in Notifications**
+   - Implemented real-time notifications for member check-ins
+   - Added visual indicators for successful and failed check-ins
+   - Ensured notifications are displayed immediately without page refresh
+
+3. **Square Webhook Integration**
+   - Extended SSE system to handle Square webhook events
+   - Implemented real-time data refresh when webhook events are received
+   - Added notifications for customer and subscription updates
+
+4. **Dashboard Refresh**
+   - Added manual refresh functionality for all dashboard tabs
+   - Implemented automatic data refresh when webhook events are received
+   - Added timestamp display to show when data was last refreshed
+
+## Static Assets
+
+1. **Public Directory**
+   - Created a public directory for static assets
+   - Added proper asset organization and documentation
+
+2. **QR Code Implementation**
+   - Replaced client-side QR code generation with static image
+   - Improved performance by eliminating client-side canvas operations
+   - Simplified maintenance by using easily replaceable static files
+
+3. **Logo Files**
+   - Added proper logo files for consistent branding
+   - Ensured all referenced assets are available in the public directory
+
 ## Data Flow Enhancements
 
 1. **Check-in Process**

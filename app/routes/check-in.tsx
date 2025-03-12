@@ -10,6 +10,7 @@ import { createSystemLog } from '~/models/system-log.server';
 import { createCheckIn } from '~/models/check-in.server';
 import { getCustomerByPhoneNumber, upsertCustomer } from '~/models/customer.server';
 import type { CheckInResult as CheckInResultType } from '~/types';
+import { emitCheckInEvent } from '~/utils/sse.server';
 
 // Mock data for development when Square is not configured
 const MOCK_SUCCESS_RESULT: CheckInResultType = {
@@ -93,13 +94,32 @@ export async function action({ request }: ActionFunctionArgs) {
         
         // Create check-in record if successful
         if (mockResult.success) {
-          await createCheckIn({
+          const checkIn = await createCheckIn({
             customerId: customer.id,
             customerName: customer.name,
             phoneNumber: customer.phoneNumber,
             membershipType: customer.membershipType,
             locationId
           });
+          
+          // Emit check-in event for real-time notifications
+          const checkInRecord = {
+            id: checkIn.id.toString(),
+            timestamp: checkIn.checkInTime.toISOString(),
+            customerName: customer.name,
+            phoneNumber: customer.phoneNumber || '',
+            success: true,
+            membershipType: customer.membershipType || 'Unknown',
+            message: `Check-in successful (${customer.membershipType === 'Active' ? 'Subscription' : 'Cash payment'})`,
+            nextPayment: '',
+            initials: customer.name
+              .split(' ')
+              .map(name => name[0])
+              .join('')
+              .substring(0, 2)
+          };
+          
+          emitCheckInEvent(checkInRecord);
         }
       }
       
@@ -136,13 +156,51 @@ export async function action({ request }: ActionFunctionArgs) {
       
       // Create check-in record if successful
       if (result.success) {
-        await createCheckIn({
+        const checkIn = await createCheckIn({
           customerId: customer.id,
           customerName: customer.name,
           phoneNumber: customer.phoneNumber,
           membershipType: customer.membershipType,
           locationId
         });
+        
+        // Emit check-in event for real-time notifications
+        const checkInRecord = {
+          id: checkIn.id.toString(),
+          timestamp: checkIn.checkInTime.toISOString(),
+          customerName: customer.name,
+          phoneNumber: customer.phoneNumber || '',
+          success: true,
+          membershipType: customer.membershipType || 'Unknown',
+          message: `Check-in successful (${customer.membershipType === 'Active' ? 'Subscription' : 'Cash payment'})`,
+          nextPayment: '',
+          initials: customer.name
+            .split(' ')
+            .map(name => name[0])
+            .join('')
+            .substring(0, 2)
+        };
+        
+        emitCheckInEvent(checkInRecord);
+      } else {
+        // Emit failed check-in event
+        const checkInRecord = {
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+          customerName: customer.name,
+          phoneNumber: customer.phoneNumber || '',
+          success: false,
+          membershipType: customer.membershipType || 'Unknown',
+          message: result.message || 'Check-in failed',
+          nextPayment: '',
+          initials: customer.name
+            .split(' ')
+            .map(name => name[0])
+            .join('')
+            .substring(0, 2)
+        };
+        
+        emitCheckInEvent(checkInRecord);
       }
     }
     

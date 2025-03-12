@@ -7,6 +7,7 @@ A web application for managing gym member check-ins, built with Remix, Prisma, a
 - Member check-in via phone number
 - Square API integration for membership verification
 - Admin dashboard with real-time check-in notifications
+- Real-time webhook processing for Square events
 - Check-in history and analytics
 - PostgreSQL database for data persistence
 - Docker support for development and production
@@ -17,6 +18,7 @@ A web application for managing gym member check-ins, built with Remix, Prisma, a
 - **Backend**: Node.js, Remix
 - **Database**: PostgreSQL with Prisma ORM
 - **API Integration**: Square API for membership verification
+- **Real-time Updates**: Server-Sent Events (SSE)
 - **Deployment**: Docker, Docker Swarm
 
 ## Getting Started
@@ -46,17 +48,21 @@ A web application for managing gym member check-ins, built with Remix, Prisma, a
    ```
    Edit the `.env` file with your Square API credentials and database connection string.
 
-4. Start the development database:
+4. Add your static assets:
+   - Place your logo in `public/logo-light.png`
+   - Place your QR code image in `public/gym-checkin-qr.png`
+
+5. Start the development database:
    ```bash
    docker-compose -f compose.dev.yaml up -d
    ```
 
-5. Run database migrations:
+6. Run database migrations:
    ```bash
    npx prisma migrate dev
    ```
 
-6. Start the development server:
+7. Start the development server:
    ```bash
    npm run dev
    ```
@@ -72,6 +78,25 @@ The application uses PostgreSQL with Prisma ORM for data persistence. The databa
 - **SystemLog**: System activity and error logs
 
 For detailed information about the database implementation, see the [Database Implementation Guide](./database-implementation-guide.md).
+
+## Real-time Features
+
+The application includes several real-time features:
+
+- **Check-in Notifications**: Instant notifications on the admin dashboard when members check in
+- **Square Webhook Integration**: Real-time updates when customer or subscription data changes in Square
+- **Dashboard Refresh**: Automatic data refresh when webhook events are received
+
+These features use Server-Sent Events (SSE) to provide a responsive user experience without requiring page refreshes.
+
+## Static Assets
+
+The application uses the following static assets:
+
+- **Logo**: `public/logo-light.png` - Used on the check-in screen
+- **QR Code**: `public/gym-checkin-qr.png` - Used for member check-ins
+
+To customize these assets, simply replace the files in the public directory with your own versions.
 
 ## Production Deployment
 
@@ -90,6 +115,7 @@ The application behaves differently based on the environment:
 - Uses real data from Square API
 - Stores all check-ins and customer data in the database
 - Logs all system events to the database for monitoring
+- Processes Square webhooks in real-time
 
 ## Contributing
 

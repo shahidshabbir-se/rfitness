@@ -1,0 +1,8 @@
+This is a placeholder for the PNG QR code image.
+
+To use your own QR code:
+1. Create a PNG image of your QR code (300x300 pixels recommended)
+2. Name it "gym-checkin-qr.png"
+3. Replace this file in the public directory
+
+The QR code will be displayed on the admin QR page and will be available for download. 

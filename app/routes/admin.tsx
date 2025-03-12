@@ -1,6 +1,6 @@
 import { json, redirect, type LoaderFunctionArgs } from '@remix-run/node';
-import { useLoaderData, Link } from '@remix-run/react';
-import { useState, useEffect } from 'react';
+import { useLoaderData, Link, useFetcher } from '@remix-run/react';
+import { useState, useEffect, useCallback } from 'react';
 import { getEnv } from '~/utils/env.server';
 import type { 
   CheckInRecord, 
@@ -213,190 +213,203 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 }
 
-export default function Admin() {
+export default function AdminDashboard() {
   const { 
-    squareEnvironment, 
-    isConfigured, 
     checkIns: initialCheckIns, 
-    members, 
+    members: initialMembers, 
     analytics, 
     webhookStatus,
     systemStatus,
     recentActivity
   } = useLoaderData<typeof loader>();
   
+  const fetcher = useFetcher();
   const [activeTab, setActiveTab] = useState('checkIns');
   const [notifications, setNotifications] = useState<CheckInRecord[]>([]);
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>(initialCheckIns);
+  const [members, setMembers] = useState<Member[]>(initialMembers);
+  const [lastRefresh, setLastRefresh] = useState<string>(new Date().toISOString());
   
-  // Simulate receiving real-time check-ins
+  // Function to fetch fresh data from the server
+  const refreshData = useCallback(() => {
+    fetcher.load('/admin');
+    setLastRefresh(new Date().toISOString());
+  }, [fetcher]);
+  
+  // Update data when fetcher returns new data
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Simulate a new check-in every 30 seconds
-      if (Math.random() > 0.5) {
-        const success = Math.random() > 0.3;
-        const firstName = success ? 
-          ['James', 'Sarah', 'David', 'Emma', 'Michael', 'Lisa', 'Robert', 'Anna'][Math.floor(Math.random() * 8)] : 
-          'Unknown';
-        const lastName = success ? 
-          ['Wilson', 'Johnson', 'Thompson', 'Brown', 'Davis', 'Smith', 'Jones', 'Taylor'][Math.floor(Math.random() * 8)] : 
-          'User';
-        const fullName = `${firstName} ${lastName}`;
-        const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`;
+    if (fetcher.data) {
+      const data = fetcher.data;
+      if (data.checkIns) setCheckIns(data.checkIns);
+      if (data.members) setMembers(data.members);
+    }
+  }, [fetcher.data]);
+  
+  // Set up SSE connection for real-time check-in notifications
+  useEffect(() => {
+    // Create EventSource for SSE
+    const eventSource = new EventSource('/api/sse');
+    
+    // Handle connection open
+    eventSource.onopen = () => {
+      console.log('SSE connection established');
+    };
+    
+    // Handle check-in events
+    eventSource.addEventListener('check-in', (event) => {
+      try {
+        const checkInRecord = JSON.parse(event.data) as CheckInRecord;
         
-        const membershipType = success ? 
-          (Math.random() > 0.7 ? 'Cash Payment (£30)' : 'Monthly Subscription (£25)') : 
-          'Monthly Subscription (£25)';
+        // Update notifications and check-ins
+        setNotifications((prev) => [checkInRecord, ...prev].slice(0, 5));
+        setCheckIns((prev) => [checkInRecord, ...prev]);
+      } catch (error) {
+        console.error('Error parsing check-in event:', error);
+      }
+    });
+    
+    // Handle customer update events
+    eventSource.addEventListener('customer-update', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('Received customer update:', data);
         
-        // Generate a random future date for next payment
-        const nextPaymentDate = new Date();
-        nextPaymentDate.setDate(nextPaymentDate.getDate() + Math.floor(Math.random() * 30) + 1);
-        const nextPayment = success ? 
-          `${nextPaymentDate.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][nextPaymentDate.getMonth()]} ${nextPaymentDate.getFullYear()}` : 
-          '';
+        // Refresh data to get the latest changes
+        refreshData();
         
-        const message = success ? 
-          `Check-in successful (${membershipType === 'Cash Payment (£30)' ? 'Cash payment' : 'Subscription'})` : 
-          'Payment overdue. Last payment: 5 Apr 2024';
-        
-        const newCheckIn: CheckInRecord = {
-          id: Date.now().toString(),
-          timestamp: new Date().toISOString(),
-          customerName: fullName,
-          phoneNumber: '+44 770 ' + Math.floor(Math.random() * 900 + 100) + ' ' + Math.floor(Math.random() * 9000 + 1000),
-          success: success,
-          membershipType: membershipType,
-          message: message,
-          nextPayment: nextPayment,
-          initials: initials
+        // Show notification about the update
+        const updateNotification: CheckInRecord = {
+          id: `customer-update-${Date.now()}`,
+          timestamp: data.timestamp,
+          customerName: data.customerName || 'Customer',
+          phoneNumber: data.phoneNumber || '',
+          success: true,
+          membershipType: 'Update',
+          message: `Customer ${data.eventType.split('.')[1]}: ${data.customerName}`,
+          nextPayment: '',
+          initials: data.customerName ? data.customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2) : 'CU'
         };
         
-        // Update both notifications and check-ins
-        setNotifications((prev: CheckInRecord[]) => [newCheckIn, ...prev].slice(0, 5));
-        setCheckIns((prev: CheckInRecord[]) => [newCheckIn, ...prev]);
+        setNotifications((prev) => [updateNotification, ...prev].slice(0, 5));
+      } catch (error) {
+        console.error('Error handling customer update:', error);
       }
-    }, 30000);
+    });
     
-    return () => clearInterval(interval);
-  }, []);
+    // Handle subscription update events
+    eventSource.addEventListener('subscription-update', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('Received subscription update:', data);
+        
+        // Refresh data to get the latest changes
+        refreshData();
+        
+        // Show notification about the update
+        const updateNotification: CheckInRecord = {
+          id: `subscription-update-${Date.now()}`,
+          timestamp: data.timestamp,
+          customerName: 'Subscription Update',
+          phoneNumber: data.customerId || '',
+          success: data.status === 'ACTIVE',
+          membershipType: 'Subscription',
+          message: `Subscription ${data.eventType.split('.')[1]}: ${data.status}`,
+          nextPayment: '',
+          initials: 'SU'
+        };
+        
+        setNotifications((prev) => [updateNotification, ...prev].slice(0, 5));
+      } catch (error) {
+        console.error('Error handling subscription update:', error);
+      }
+    });
+    
+    // Handle errors
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      // Try to reconnect after a delay
+      setTimeout(() => {
+        eventSource.close();
+      }, 5000);
+    };
+    
+    // Clean up on unmount
+    return () => {
+      eventSource.close();
+    };
+  }, [refreshData]);
   
   // Function to manually refresh check-ins
   const handleManualRefresh = () => {
-    // In a real app, this would fetch fresh data from the server
-    // For now, we'll just simulate by adding a timestamp to show it refreshed
+    refreshData();
+    
+    // Add a refresh message to the check-ins
     const refreshMessage: CheckInRecord = {
       id: 'refresh-' + Date.now().toString(),
       timestamp: new Date().toISOString(),
       customerName: 'System Refresh',
       phoneNumber: '',
       success: true,
-      membershipType: '',
+      membershipType: 'System',
       message: 'Check-in log refreshed manually',
       nextPayment: '',
       initials: 'SR'
     };
     
-    setCheckIns((prev: CheckInRecord[]) => [refreshMessage, ...prev]);
+    setNotifications((prev) => [refreshMessage, ...prev].slice(0, 5));
   };
   
   return (
-    <div className="flex min-h-screen flex-col bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-            <div className="flex space-x-4">
-              <Link 
-                to="/qr" 
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                View Check-in QR
-              </Link>
-              <Link 
-                to="/logout" 
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Logout
-              </Link>
-              <Link 
-                to="/" 
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Back to Home
-              </Link>
-            </div>
-          </div>
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8 flex flex-col items-start justify-between space-y-4 md:flex-row md:items-center md:space-y-0">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+          <p className="text-sm text-gray-500">
+            Last updated: {new Date(lastRefresh).toLocaleString()}
+          </p>
         </div>
-      </header>
+        <button
+          onClick={refreshData}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          Refresh Dashboard
+        </button>
+      </div>
       
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">
-        {/* Status Section */}
-        <div className="mb-8 rounded-lg bg-white p-6 shadow">
-          <h2 className="mb-4 text-xl font-semibold text-gray-800">System Overview</h2>
-          
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-            {/* Square API Status */}
-            <SystemStatusComponent 
-              squareEnvironment={squareEnvironment}
-              isConfigured={isConfigured}
-            />
-            
-            {/* Check-in System Status */}
-            <CheckInSystemStatus
-              status={systemStatus.status}
-              lastChecked={systemStatus.lastChecked}
-            />
-            
-            {/* Webhook Status */}
-            <WebhookStatusComponent webhookStatus={webhookStatus} />
-            
-            {/* Recent Activity */}
-            <RecentActivity
-              totalCheckIns={recentActivity.totalCheckIns}
-              activeMembers={recentActivity.activeMembers}
-              todayCheckIns={recentActivity.todayCheckIns}
-              lastUpdated={recentActivity.lastUpdated}
-            />
-          </div>
-        </div>
+      {/* Notifications */}
+      <CheckInNotifications notifications={notifications} />
+      
+      {/* Status Cards */}
+      <div className="mb-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <SystemStatusComponent status={systemStatus} />
+        <CheckInSystemStatus stats={analytics} />
+        <MembershipStatus stats={analytics} />
+        <WebhookStatusComponent status={webhookStatus} />
+      </div>
+      
+      {/* Main Content */}
+      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <AdminTabs activeTab={activeTab} onTabChange={setActiveTab} />
         
-        {/* Notifications */}
-        <CheckInNotifications notifications={notifications} />
-        
-        {/* Tabs */}
-        <AdminTabs activeTab={activeTab} setActiveTab={setActiveTab} />
-        
-        {/* Tab Content */}
-        <div className="rounded-lg bg-white p-6 shadow">
+        <div className="mt-6">
           {activeTab === 'checkIns' && (
             <CheckInLog checkIns={checkIns} onRefresh={handleManualRefresh} />
           )}
           
           {activeTab === 'members' && (
-            <MembersTab members={members} />
-          )}
-          
-          {activeTab === 'membership' && (
-            <MembershipStatus 
-              activeMembers={analytics.activeMembers}
-              needsRenewal={analytics.needsRenewal}
-            />
+            <MembersTab members={members} onRefresh={refreshData} />
           )}
           
           {activeTab === 'analytics' && (
-            <AnalyticsReports 
-              peakHours={analytics.peakHours}
-              topMembers={analytics.topMembers}
-              checkInsByDay={analytics.checkInsByDay}
-              membershipTypes={analytics.membershipTypes}
-            />
+            <AnalyticsReports analytics={analytics} />
+          )}
+          
+          {activeTab === 'activity' && (
+            <RecentActivity data={recentActivity} />
           )}
         </div>
-      </main>
-      
-      <footer className="bg-white py-4 text-center text-sm text-gray-600">
-        <p>Gym Check-in System &copy; {new Date().getFullYear()}</p>
-      </footer>
+      </div>
     </div>
   );
 }
