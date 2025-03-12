@@ -3,7 +3,7 @@ name: Deploy rfitness
 on:
   push:
     branches:
-      - "my-prod"
+      - "main"
 
 permissions:
   packages: write
@@ -20,7 +20,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -28,8 +28,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/shahidshabbir-se/rfitness:latest
-            ghcr.io/shahidshabbir-se/rfitness:${{ github.sha }}
+            ghcr.io/engenlabs/rfitness:latest
+            ghcr.io/engenlabs/rfitness:${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -39,18 +39,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create env file
-        run: |
-          echo "GIT_COMMIT_HASH=${{ github.sha }}" > ./envfile
+      - name: Create environment file
+        run: echo "GIT_COMMIT_HASH=${{ github.sha }}" >> ./envfile
 
-      - name: Set up SSH key and known hosts
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
-
-      - name: Deploy with Docker Stack
+      - name: Deploy Docker Stack (Without App)
         uses: cssnr/stack-deploy-action@v1
         with:
           name: rfitness
@@ -60,8 +52,24 @@ jobs:
           ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           env_file: ./envfile
 
-      - name: Apply Prisma Migrations
+      - name: Wait for Database to be Ready
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-          docker exec $(docker ps -q -f name=app) npx prisma migrate deploy
-          EOF
+          echo "Waiting for database..."
+          until nc -z -v -w30 ${{ secrets.DB_HOST }} 5432
+          do
+            echo "Database is not ready yet..."
+            sleep 5
+          done
+          echo "Database is ready!"
+
+      - name: Run Prisma Migrations
+        run: |
+          echo "Running Prisma migrations..."
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Start Application After Migrations
+        run: |
+          echo "Starting app service..."
+          ssh -i ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "docker service scale rfitness_app=1"
