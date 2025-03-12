@@ -55,7 +55,10 @@ jobs:
           echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
-          ssh -v -N -L 5432:localhost:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} -i ~/.ssh/deploy_key
+
+      - name: Setup SSH Tunnel
+        run: |
+          ssh -N -L 5432:localhost:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} -i ~/.ssh/deploy_key &
 
       - name: Apply Prisma Migrations
         run: |
