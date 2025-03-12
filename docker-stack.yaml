@@ -57,7 +57,10 @@ services:
     secrets:
       - db-password
     ports:
-      - "5432:5432"
+      - mode: host
+        protocol: tcp
+        published: 5432
+        target: 5432
     environment:
       - POSTGRES_DB=app
       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password

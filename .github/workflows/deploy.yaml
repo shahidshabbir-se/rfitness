@@ -43,28 +43,12 @@ jobs:
         run: |
           echo "GIT_COMMIT_HASH=${{ github.sha }}" > ./envfile
 
-      - name: Setup Node
-        uses: actions/setup-node@v3
-
-      - name: Install dependencies
-        run: npm install
-
       - name: Set up SSH key and known hosts
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
-
-      - name: Setup SSH Tunnel
-        run: |
-          ssh -N -L 5432:localhost:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} -i ~/.ssh/deploy_key &
-
-      - name: Apply Prisma Migrations
-        run: |
-          npx prisma migrate deploy
-        env:
-          DATABASE_URL: "postgresql://postgres:${{ secrets.DATABASE_PASSWORD }}@127.0.0.1:5432/app?schema=public"
 
       - name: Deploy with Docker Stack
         uses: cssnr/stack-deploy-action@v1
@@ -75,3 +59,9 @@ jobs:
           user: ${{ secrets.SERVER_USER }}
           ssh_key: ~/.ssh/deploy_key
           env_file: ./envfile
+
+      - name: Apply Prisma Migrations
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          docker exec $(docker ps -q -f name=app) npx prisma migrate deploy
+          EOF
