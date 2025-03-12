@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Form } from "@remix-run/react";
 import { json, redirect } from '@remix-run/node';
 import { useActionData, useNavigation } from '@remix-run/react';
 import type { ActionFunctionArgs } from '@remix-run/node';
@@ -39,16 +40,16 @@ const MOCK_FAILURE_RESULT: CheckInResultType = {
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const phoneNumber = formData.get('phoneNumber')?.toString() || '';
-  
+
   // In a real app, you would:
   // 1. Validate the phone number
   // 2. Look up the customer in your database
   // 3. Check their membership status
   // 4. Process the check-in
-  
+
   // For this example, we'll simulate a successful check-in
   const isSuccess = Math.random() > 0.2; // 80% success rate for demo
-  
+
   // Create a check-in record
   const checkInData: CheckInRecord = {
     id: Date.now().toString(),
@@ -57,17 +58,17 @@ export async function action({ request }: ActionFunctionArgs) {
     phoneNumber,
     success: isSuccess,
     membershipType: isSuccess ? 'Monthly Subscription (£25)' : '',
-    message: isSuccess 
-      ? 'Check-in successful (Subscription)' 
+    message: isSuccess
+      ? 'Check-in successful (Subscription)'
       : 'Member not found or payment required',
     nextPayment: isSuccess ? '15 Jun 2024' : '',
     initials: isSuccess ? 'JS' : 'UN'
   };
-  
+
   // Process the check-in (this will emit the SSE event in production)
   processCheckIn(checkInData);
-  
-  return json({ 
+
+  return json({
     success: isSuccess,
     message: checkInData.message,
     checkInData
@@ -77,12 +78,12 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function CheckIn() {
   const actionData = useActionData<typeof action>();
   const [phoneNumber, setPhoneNumber] = useState('');
-  
+
   return (
     <div className="mx-auto max-w-md px-4 py-8 sm:px-6 lg:px-8">
       <div className="rounded-lg bg-white p-6 shadow">
         <h1 className="mb-6 text-2xl font-bold text-gray-900">Gym Check-In</h1>
-        
+
         <Form method="post">
           <div className="mb-4">
             <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">
@@ -99,7 +100,7 @@ export default function CheckIn() {
               required
             />
           </div>
-          
+
           <button
             type="submit"
             className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -107,17 +108,15 @@ export default function CheckIn() {
             Check In
           </button>
         </Form>
-        
+
         {actionData && (
-          <div className={`mt-6 rounded-md p-4 ${
-            actionData.success ? 'bg-green-50' : 'bg-red-50'
-          }`}>
-            <p className={`text-sm font-medium ${
-              actionData.success ? 'text-green-800' : 'text-red-800'
+          <div className={`mt-6 rounded-md p-4 ${actionData.success ? 'bg-green-50' : 'bg-red-50'
             }`}>
+            <p className={`text-sm font-medium ${actionData.success ? 'text-green-800' : 'text-red-800'
+              }`}>
               {actionData.message}
             </p>
-            
+
             {actionData.success && (
               <p className="mt-2 text-sm text-gray-600">
                 Welcome, {actionData.checkInData.customerName}!
