@@ -3,7 +3,7 @@ name: Deploy rfitness
 on:
   push:
     branches:
-      - "main"
+      - "my-prod"
 
 permissions:
   packages: write
@@ -62,12 +62,21 @@ jobs:
           done
           echo "Database is ready!"
 
-      - name: Run Prisma Migrations
+      - name: Run Prisma Migrations Over SSH Tunnel
         run: |
+          echo "Starting SSH tunnel..."
+          ssh -o IdentitiesOnly=yes -i ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} -N -L 5433:localhost:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} &
+          SSH_TUNNEL_PID=$!
+
+          echo "Waiting for tunnel to be ready..."
+          sleep 5
+
           echo "Running Prisma migrations..."
+          DATABASE_URL="postgresql://postgres:${{ secrets.DB_PASSWORD }}@localhost:5433/app"
           npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+          echo "Closing SSH tunnel..."
+          kill $SSH_TUNNEL_PID
 
       - name: Start Application After Migrations
         run: |
