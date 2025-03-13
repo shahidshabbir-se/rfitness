@@ -19,7 +19,7 @@ COPY . .
 RUN corepack enable && npx prisma generate && pnpm run build
 
 # Production stage 
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -42,5 +42,5 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # Run remix-serve
-ENTRYPOINT ["npx", "--no-update-notifier", "remix-serve"]
+ENTRYPOINT ["npx prisma generate && npx", "--no-update-notifier", "remix-serve"]
 CMD ["build/server/index.js"]
