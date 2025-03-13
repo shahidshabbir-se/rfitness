@@ -40,11 +40,11 @@ services:
       - POSTGRES_DB=app
       - POSTGRES_PORT=5432
       - POSTGRES_SSLMODE=disable
-      - SQUARE_ENVIRONMENT=sandbox
+      - SQUARE_ENVIRONMENT=production
       - SQUARE_ACCESS_TOKEN_FILE=/run/secrets/square-access-token
       - SQUARE_LOCATION_ID_FILE=/run/secrets/square-location-id
       - SQUARE_WEBHOOK_SIGNATURE_KEY_FILE=/run/secrets/square-webhook-signature-key
-      - WEBHOOK_URL=https://checkin.rfitnessbelfast.com/webhook
+      - SQUARE_WEBHOOK_URL=https://checkin.rfitnessbelfast.com/api/webhook
       - DATABASE_URL_FILE=/run/secrets/db-url
     labels:
       - "traefik.enable=true"

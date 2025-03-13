@@ -1,7 +1,9 @@
 import { getEnv } from './env.server';
 import type { WebhookStatusData } from '~/types';
 
+
 type WebhookEvent = 'check-in' | 'error' | 'system-status';
+
 
 export async function triggerWebhook(
   event: WebhookEvent,
@@ -9,13 +11,14 @@ export async function triggerWebhook(
 ): Promise<boolean> {
   const env = getEnv();
   // In development or if no webhook URL is configured, just log and return
-  if (!env.WEBHOOK_URL) {
+  if (!env.SQUARE_WEBHOOK_URL) {
     console.log(`[Webhook ${event}]`, data);
     return true;
   }
 
+
   try {
-    const response = await fetch(env.WEBHOOK_URL, {
+    const response = await fetch(env.SQUARE_WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -29,10 +32,12 @@ export async function triggerWebhook(
       })
     });
 
+
     if (!response.ok) {
       console.error(`Webhook error: ${response.status} ${response.statusText}`);
       return false;
     }
+
 
     return true;
   } catch (error) {
@@ -41,18 +46,19 @@ export async function triggerWebhook(
   }
 }
 
+
 // Get webhook status for admin dashboard
 export function getWebhookStatus(): WebhookStatusData {
   const env = getEnv();
-  const webhookUrl = env.WEBHOOK_URL;
-  const isConfigured = Boolean(webhookUrl && webhookUrl.length > 0);
-  
+  const isConfigured = Boolean(env.SQUARE_WEBHOOK_URL && env.SQUARE_WEBHOOK_SIGNATURE_KEY);
+
+
   return {
-    status: isConfigured ? 'configured' : 'not_configured',
-    message: isConfigured 
-      ? `Webhook configured at ${webhookUrl}` 
-      : 'Webhook not configured',
-    lastReceived: null, // We don't track this yet
-    signatureValid: isConfigured // Assume valid if configured
+    status: isConfigured ? 'configured' : 'warning',
+    message: isConfigured
+      ? 'Square webhooks are properly configured and ready to receive events'
+      : 'Square webhooks are not configured. Some features may be limited.',
+    lastReceived: null,
+    signatureValid: isConfigured
   };
 }
