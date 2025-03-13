@@ -26,7 +26,7 @@ services:
       - "letsencrypt:/letsencrypt"
 
   app:
-    image: ghcr.io/engenlabs/rfitness:${GIT_COMMIT_HASH:-latest}
+    image: ghcr.io/shahidshabbir-se/rfitness:${GIT_COMMIT_HASH:-latest}
     secrets:
       - db-password
     environment:
