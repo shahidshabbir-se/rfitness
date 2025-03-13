@@ -52,16 +52,6 @@ jobs:
           ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           env_file: ./envfile
 
-      - name: Wait for Database to be Ready
-        run: |
-          echo "Waiting for database..."
-          until nc -z -v -w30 ${{ secrets.DB_HOST }} 5432
-          do
-            echo "Database is not ready yet..."
-            sleep 5
-          done
-          echo "Database is ready!"
-
       - name: Run Prisma Migrations Over SSH Tunnel
         run: |
           echo "Starting SSH tunnel..."
