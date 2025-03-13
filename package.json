@@ -6,8 +6,8 @@
   "license": "MIT",
   "sideEffects": false,
   "scripts": {
-    "build": "remix build",
-    "dev": "remix dev",
+    "build": "remix vite:build",
+    "dev": "remix vite:dev",
     "start": "remix-serve build",
     "typecheck": "tsc",
     "format": "prettier --write .",
