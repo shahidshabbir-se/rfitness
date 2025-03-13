@@ -42,6 +42,13 @@ jobs:
       - name: Create environment file
         run: echo "GIT_COMMIT_HASH=${{ github.sha }}" >> ./envfile
 
+      - name: Set up SSH key and known hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
       - name: Deploy Docker Stack (Without App)
         uses: cssnr/stack-deploy-action@v1
         with:
@@ -52,23 +59,20 @@ jobs:
           ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           env_file: ./envfile
 
-      - name: Run Prisma Migrations Over SSH Tunnel
+      - name: Run Prisma Migrations in the App Container
         run: |
-          echo "Starting SSH tunnel..."
-          ssh -o IdentitiesOnly=yes -i ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} -N -L 5433:localhost:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} &
-          SSH_TUNNEL_PID=$!
-
-          echo "Waiting for tunnel to be ready..."
-          sleep 5
-
           echo "Running Prisma migrations..."
-          DATABASE_URL="postgresql://postgres:${{ secrets.DB_PASSWORD }}@localhost:5433/app"
-          npx prisma migrate deploy
-
-          echo "Closing SSH tunnel..."
-          kill $SSH_TUNNEL_PID
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          APP_CONTAINER=$(docker ps --filter "name=app" --format "{{.ID}}")
+          if [ -z "$APP_CONTAINER" ]; then
+            echo "App container not found!"
+            exit 1
+          fi
+          echo "Applying Prisma migrations..."
+          docker exec $APP_CONTAINER npx prisma migrate deploy
+          EOF
 
       - name: Start Application After Migrations
         run: |
           echo "Starting app service..."
-          ssh -i ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "docker service scale rfitness_app=1"
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "docker service scale rfitness_app=1"
