@@ -3,7 +3,7 @@ FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl1.1-compat
 WORKDIR /app
 
 # Install dependencies using pnpm
@@ -16,7 +16,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN corepack enable && pnpm run build
+RUN corepack enable && npx prisma generate && pnpm run build
 
 # Production stage 
 FROM node:22-alpine AS runner
@@ -32,6 +32,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=remix:nodejs /app/build ./build
 COPY --from=builder --chown=remix:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=remix:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=remix:nodejs /app/prisma ./prisma
 
 # Set correct permissions for the non-root user
 USER remix

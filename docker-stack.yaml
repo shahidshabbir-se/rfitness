@@ -65,6 +65,7 @@ services:
         export SQUARE_ACCESS_TOKEN=$$(cat /run/secrets/square-access-token) && \
         export SQUARE_LOCATION_ID=$$(cat /run/secrets/square-location-id) && \
         export SQUARE_WEBHOOK_SIGNATURE_KEY=$$(cat /run/secrets/square-webhook-signature-key) && \
+        npx prisma generate && \
         npx --no-install remix-serve build/server/index.js",
       ]
 
