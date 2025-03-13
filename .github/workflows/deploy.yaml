@@ -39,9 +39,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create environment file
-        run: echo "GIT_COMMIT_HASH=${{ github.sha }}" >> ./envfile
-
       - name: Set up SSH key and known hosts
         run: |
           mkdir -p ~/.ssh
@@ -57,20 +54,22 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           user: ${{ secrets.SERVER_USER }}
           ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          env_file: ./envfile
 
-      - name: Run Prisma Migrations in the App Container
+      - name: Start SSH Tunnel for Database
         run: |
+          echo "Starting SSH tunnel..."
+          ssh -o IdentitiesOnly=yes -i ~/.ssh/deploy_key -N -L 5433:localhost:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} &
+          SSH_TUNNEL_PID=$!
+
+          echo "Waiting for tunnel to be ready..."
+          sleep 5
+
           echo "Running Prisma migrations..."
-          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-          APP_CONTAINER=$(docker ps --filter "name=app" --format "{{.ID}}")
-          if [ -z "$APP_CONTAINER" ]; then
-            echo "App container not found!"
-            exit 1
-          fi
-          echo "Applying Prisma migrations..."
-          docker exec $APP_CONTAINER npx prisma migrate deploy
-          EOF
+          export DATABASE_URL="postgresql://postgres:${{ secrets.DB_PASSWORD }}@localhost:5433/app"
+          npx prisma migrate deploy
+
+          echo "Closing SSH tunnel..."
+          kill $SSH_TUNNEL_PID
 
       - name: Start Application After Migrations
         run: |
