@@ -244,6 +244,8 @@ export default function CheckInPage() {
   // Reset when starting a new check-in
   const handleNewCheckIn = () => {
     setShowResult(false);
+    // Reset the action data by redirecting to the check-in page
+    window.location.href = '/check-in';
   };
 
   return (

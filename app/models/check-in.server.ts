@@ -143,6 +143,105 @@ export async function getCheckInStats(): Promise<{
 }
 
 /**
+ * Get peak hours data for check-ins
+ */
+export async function getCheckInPeakHours(timeRange: 'week' | 'month' | 'quarter' = 'week'): Promise<Array<{ hour: string; count: number }>> {
+  // Determine date range based on selected time range
+  const now = new Date();
+  let startDate: Date;
+  
+  switch (timeRange) {
+    case 'month':
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 30);
+      break;
+    case 'quarter':
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 90);
+      break;
+    case 'week':
+    default:
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 7);
+      break;
+  }
+  
+  // Get check-ins grouped by hour
+  const checkInsByHour = await prisma.$queryRaw<Array<{ hour: string; count: number }>>`
+    SELECT 
+      to_char("checkInTime", 'HH24:00-HH24:59') as hour,
+      COUNT(*) as count
+    FROM "CheckIn"
+    WHERE "checkInTime" >= ${startDate}
+    GROUP BY hour
+    ORDER BY count DESC
+    LIMIT 5
+  `;
+  
+  return checkInsByHour;
+}
+
+/**
+ * Get check-ins by day of week
+ */
+export async function getCheckInsByDayOfWeek(timeRange: 'week' | 'month' | 'quarter' = 'week'): Promise<Array<{ date: string; count: number }>> {
+  // Determine date range based on selected time range
+  const now = new Date();
+  let startDate: Date;
+  let groupBy: string;
+  
+  switch (timeRange) {
+    case 'month':
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 30);
+      // For month view, we'll group by day of week
+      groupBy = 'day_of_week';
+      break;
+    case 'quarter':
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 90);
+      // For quarter view, we'll group by day of week
+      groupBy = 'day_of_week';
+      break;
+    case 'week':
+    default:
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 7);
+      // For week view, we'll group by day of week
+      groupBy = 'day_of_week';
+      break;
+  }
+  
+  // Get check-ins grouped by day of week
+  const checkInsByDay = await prisma.$queryRaw<Array<{ date: string; count: number }>>`
+    SELECT 
+      to_char("checkInTime", 'Dy') as date,
+      COUNT(*) as count
+    FROM "CheckIn"
+    WHERE "checkInTime" >= ${startDate}
+    GROUP BY date
+    ORDER BY CASE
+      WHEN date = 'Mon' THEN 1
+      WHEN date = 'Tue' THEN 2
+      WHEN date = 'Wed' THEN 3
+      WHEN date = 'Thu' THEN 4
+      WHEN date = 'Fri' THEN 5
+      WHEN date = 'Sat' THEN 6
+      WHEN date = 'Sun' THEN 7
+    END
+  `;
+  
+  // Ensure we have all days of the week, even if there are no check-ins
+  const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const result = daysOfWeek.map(day => {
+    const found = checkInsByDay.find((item: { date: string; count: number }) => item.date === day);
+    return found || { date: day, count: 0 };
+  });
+  
+  return result;
+}
+
+/**
  * Delete a check-in record
  */
 export async function deleteCheckIn(id: number): Promise<void> {

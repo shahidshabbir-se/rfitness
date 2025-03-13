@@ -1,55 +1,70 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from '@remix-run/react';
 
 interface AnalyticsReportsProps {
-  peakHours: Array<{ hour: string; count: number }>;
-  topMembers: Array<{ name: string; checkIns: number }>;
-  checkInsByDay?: Array<{ date: string; count: number }>;
-  membershipTypes?: Array<{ type: string; count: number }>;
+  analytics: {
+    peakHours: Array<{ hour: string; count: number }>;
+    topMembers: Array<{ name: string; checkIns: number }>;
+    checkInsByDay: Array<{ date: string; count: number }>;
+    membershipTypes: Array<{ type: string; count: number }>;
+  };
+  timeRange?: 'week' | 'month' | 'quarter';
+  memberMetrics?: {
+    newMembers: number;
+    retentionRate: number;
+    newMembersChange: string;
+    retentionChange: string;
+  };
 }
 
 export default function AnalyticsReports({ 
-  peakHours, 
-  topMembers,
-  checkInsByDay = [], 
-  membershipTypes = []
+  analytics,
+  timeRange = 'week',
+  memberMetrics
 }: AnalyticsReportsProps) {
-  const [timeRange, setTimeRange] = useState('week');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [selectedTimeRange, setSelectedTimeRange] = useState(timeRange);
   
-  // If no data is provided for these, create some sample data
-  const defaultCheckInsByDay = checkInsByDay.length > 0 ? checkInsByDay : [
-    { date: 'Mon', count: 42 },
-    { date: 'Tue', count: 38 },
-    { date: 'Wed', count: 45 },
-    { date: 'Thu', count: 39 },
-    { date: 'Fri', count: 48 },
-    { date: 'Sat', count: 52 },
-    { date: 'Sun', count: 30 }
-  ];
+  // Extract data from props
+  const { peakHours, topMembers, checkInsByDay, membershipTypes } = analytics;
+  
+  // Handle time range change
+  const handleTimeRangeChange = (newTimeRange: string) => {
+    setSelectedTimeRange(newTimeRange as 'week' | 'month' | 'quarter');
+    
+    // Update URL with new time range
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.set('timeRange', newTimeRange);
+    navigate(`${location.pathname}?${searchParams.toString()}`, { replace: true });
+  };
+  
+  // Update local state when prop changes
+  useEffect(() => {
+    setSelectedTimeRange(timeRange);
+  }, [timeRange]);
   
   // Filter out any trial members from membership types
   const filteredMembershipTypes = membershipTypes.length > 0 
     ? membershipTypes.filter(type => type.type !== 'Trial')
-    : [
-        { type: 'Monthly Subscription', count: 65 },
-        { type: 'Cash Payment', count: 25 }
-      ];
+    : [];
   
   // Calculate max values for scaling
-  const maxCheckInCount = Math.max(...defaultCheckInsByDay.map(day => day.count));
+  const maxCheckInCount = Math.max(...checkInsByDay.map(day => day.count || 0), 1);
   const totalMembers = filteredMembershipTypes.reduce((sum, type) => sum + type.count, 0);
   
   // Function to handle exporting analytics data
   const handleExportReports = () => {
     // Create a data object with all analytics information
     const exportData = {
-      timeRange,
-      checkInsByDay: defaultCheckInsByDay,
+      timeRange: selectedTimeRange,
+      checkInsByDay,
       membershipTypes: filteredMembershipTypes,
       peakHours,
       topMembers,
-      averageDailyCheckIns: Math.round(defaultCheckInsByDay.reduce((sum, day) => sum + day.count, 0) / defaultCheckInsByDay.length),
-      memberRetention: "92%",
-      newMembers: 18,
+      averageDailyCheckIns: Math.round(checkInsByDay.reduce((sum, day) => sum + day.count, 0) / checkInsByDay.length),
+      memberRetention: memberMetrics?.retentionRate || 0,
+      newMembers: memberMetrics?.newMembers || 0,
       exportDate: new Date().toISOString()
     };
     
@@ -65,7 +80,7 @@ export default function AnalyticsReports({
     // Create a link element
     const link = document.createElement('a');
     link.href = url;
-    link.download = `gym-analytics-${timeRange}-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `gym-analytics-${selectedTimeRange}-${new Date().toISOString().split('T')[0]}.json`;
     
     // Append to body, click and remove
     document.body.appendChild(link);
@@ -84,8 +99,8 @@ export default function AnalyticsReports({
         <div className="flex items-center space-x-2">
           <span className="text-sm text-gray-500">Time Range:</span>
           <select 
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
+            value={selectedTimeRange}
+            onChange={(e) => handleTimeRangeChange(e.target.value)}
             className="rounded-md border border-gray-300 px-3 py-1 text-sm"
           >
             <option value="week">Last 7 Days</option>
@@ -100,7 +115,7 @@ export default function AnalyticsReports({
         <div className="rounded-lg border border-gray-200 p-4">
           <h3 className="mb-4 text-lg font-medium text-gray-800">Check-ins by Day</h3>
           <div className="flex h-64 items-end justify-between space-x-2">
-            {defaultCheckInsByDay.map((day, index) => (
+            {checkInsByDay.map((day, index) => (
               <div key={index} className="flex flex-1 flex-col items-center">
                 <div 
                   className="w-full rounded-t-sm bg-blue-500 transition-all duration-500 ease-in-out hover:bg-blue-600"
@@ -188,21 +203,21 @@ export default function AnalyticsReports({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <MetricCard 
             title="Average Daily Check-ins" 
-            value={Math.round(defaultCheckInsByDay.reduce((sum, day) => sum + day.count, 0) / defaultCheckInsByDay.length)} 
+            value={Math.round(checkInsByDay.reduce((sum, day) => sum + day.count, 0) / checkInsByDay.length)} 
             change="+5%" 
             isPositive={true}
           />
           <MetricCard 
             title="Member Retention" 
-            value="92%" 
-            change="+2%" 
-            isPositive={true}
+            value={`${memberMetrics?.retentionRate || 0}%`} 
+            change={memberMetrics?.retentionChange || "+0%"} 
+            isPositive={!memberMetrics?.retentionChange?.startsWith('-')}
           />
           <MetricCard 
             title="New Members" 
-            value="18" 
-            change="-3" 
-            isPositive={false}
+            value={memberMetrics?.newMembers || 0} 
+            change={memberMetrics?.newMembersChange || "+0"} 
+            isPositive={!memberMetrics?.newMembersChange?.startsWith('-')}
           />
         </div>
       </div>

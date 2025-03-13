@@ -15,8 +15,8 @@ import { requireAdmin } from '~/utils/session.server';
 import { getCheckInSystemStatus, getRecentActivity } from '~/utils/system.server';
 
 // Import database models
-import { getRecentCheckIns, getCheckInStats } from '~/models/check-in.server';
-import { getAllCustomers, getCustomerStats } from '~/models/customer.server';
+import { getRecentCheckIns, getCheckInStats, getCheckInPeakHours, getCheckInsByDayOfWeek } from '~/models/check-in.server';
+import { getAllCustomers, getCustomerStats, getMemberMetrics } from '~/models/customer.server';
 import { getSystemLogs } from '~/models/system-log.server';
 
 // Import refactored components
@@ -31,31 +31,16 @@ import WebhookStatusComponent from '~/components/admin/WebhookStatus';
 import MembersTab from '~/components/admin/MembersTab';
 import RecentActivity from '~/components/admin/RecentActivity';
 
-// Mock data for analytics that we don't have real data for yet
-const mockPeakHours = [
-  { hour: '17:00-18:00', count: 23 },
-  { hour: '18:00-19:00', count: 31 },
-  { hour: '19:00-20:00', count: 27 },
-  { hour: '07:00-08:00', count: 19 },
-  { hour: '08:00-09:00', count: 15 }
-];
-
-const mockCheckInsByDay = [
-  { date: 'Mon', count: 42 },
-  { date: 'Tue', count: 38 },
-  { date: 'Wed', count: 45 },
-  { date: 'Thu', count: 39 },
-  { date: 'Fri', count: 48 },
-  { date: 'Sat', count: 52 },
-  { date: 'Sun', count: 30 }
-];
-
 export async function loader({ request }: LoaderFunctionArgs) {
   // Require admin authentication
   await requireAdmin(request);
   
   try {
     const env = getEnv();
+    
+    // Get time range from URL if provided
+    const url = new URL(request.url);
+    const timeRange = (url.searchParams.get('timeRange') || 'week') as 'week' | 'month' | 'quarter';
     
     // Get real webhook status
     const webhookStatus: WebhookStatusData = getWebhookStatus();
@@ -70,6 +55,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Get customer data
     const customersData = await getAllCustomers(1, 100);
     const customerStats = await getCustomerStats();
+    
+    // Get analytics data
+    const peakHours = await getCheckInPeakHours(timeRange);
+    const checkInsByDay = await getCheckInsByDayOfWeek(timeRange);
+    const memberMetrics = await getMemberMetrics(timeRange);
     
     // Get recent system logs for activity
     const { logs: recentLogs } = await getSystemLogs({ 
@@ -127,8 +117,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       activeMembers: customerStats.activeCustomers,
       needsRenewal: 0, // We don't have this information yet
       
-      // We don't have this data yet, using mock data for now
-      peakHours: mockPeakHours,
+      // Use real peak hours data
+      peakHours,
       
       // Get top members by check-in count
       topMembers: members
@@ -139,8 +129,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
           checkIns: member.visitsThisMonth
         })),
       
-      // We don't have this data yet, using mock data for now
-      checkInsByDay: mockCheckInsByDay,
+      // Use real check-ins by day data
+      checkInsByDay,
       
       // Use real membership type data
       membershipTypes: customerStats.membershipTypes.map((type: any) => ({
@@ -149,67 +139,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
       }))
     };
     
-    // Create recent activity data
-    const recentActivity: RecentActivityData = {
-      totalCheckIns: checkInStats.total,
-      activeMembers: customerStats.activeCustomers,
-      todayCheckIns: checkInStats.today,
-      lastUpdated: new Date().toISOString(),
-      recentLogs: recentLogs.map((log: any) => ({
-        id: log.id.toString(),
-        timestamp: log.timestamp.toISOString(),
-        message: log.message,
-        type: log.eventType,
-        details: log.details
-      }))
-    };
+    // Get recent activity
+    const recentActivity: RecentActivityData = await getRecentActivity();
     
     return json({
-      squareEnvironment: env.SQUARE_ENVIRONMENT,
-      isConfigured: !!env.SQUARE_ACCESS_TOKEN,
       checkIns,
       members,
       analytics,
-      webhookStatus,
       systemStatus,
-      recentActivity
+      webhookStatus,
+      recentActivity,
+      timeRange,
+      memberMetrics
     });
   } catch (error) {
-    console.error('Error in admin loader:', error);
-    
-    // Fallback to mock data if there's an error
+    console.error('Error loading admin data:', error);
     return json({
-      squareEnvironment: 'not configured',
-      isConfigured: false,
-      checkIns: [] as CheckInRecord[],
-      members: [] as Member[],
-      analytics: {
-        totalCheckIns: 0,
-        activeMembers: 0,
-        needsRenewal: 0,
-        peakHours: mockPeakHours,
-        topMembers: [],
-        checkInsByDay: mockCheckInsByDay,
-        membershipTypes: []
-      } as AnalyticsData,
-      webhookStatus: {
-        status: 'error',
-        message: 'Error fetching webhook status',
-        lastReceived: null,
-        signatureValid: false
-      } as WebhookStatusData,
-      systemStatus: {
-        status: 'degraded',
-        url: 'unknown',
-        lastChecked: new Date().toISOString()
-      } as SystemStatusData,
-      recentActivity: {
-        totalCheckIns: 0,
-        activeMembers: 0,
-        todayCheckIns: 0,
-        lastUpdated: new Date().toISOString()
-      } as RecentActivityData
-    });
+      error: 'Failed to load admin data',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
@@ -218,9 +166,11 @@ export default function AdminDashboard() {
     checkIns: initialCheckIns, 
     members: initialMembers, 
     analytics, 
-    webhookStatus,
-    systemStatus,
-    recentActivity
+    systemStatus, 
+    webhookStatus, 
+    recentActivity,
+    timeRange,
+    memberMetrics
   } = useLoaderData<typeof loader>();
   
   const fetcher = useFetcher();
@@ -402,7 +352,11 @@ export default function AdminDashboard() {
           )}
           
           {activeTab === 'analytics' && (
-            <AnalyticsReports analytics={analytics} />
+            <AnalyticsReports 
+              analytics={analytics} 
+              timeRange={timeRange}
+              memberMetrics={memberMetrics}
+            />
           )}
           
           {activeTab === 'activity' && (
