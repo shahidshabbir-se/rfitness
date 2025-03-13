@@ -29,6 +29,10 @@ services:
     image: ghcr.io/shahidshabbir-se/rfitness:${GIT_COMMIT_HASH:-latest}
     secrets:
       - db-password
+      - db-url
+      - square-access-token
+      - square-location-id
+      - square-webhook-signature-key
     environment:
       - POSTGRES_HOST=db
       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
@@ -36,6 +40,12 @@ services:
       - POSTGRES_DB=app
       - POSTGRES_PORT=5432
       - POSTGRES_SSLMODE=disable
+      - SQUARE_ENVIRONMENT=sandbox
+      - SQUARE_ACCESS_TOKEN_FILE=/run/secrets/square-access-token
+      - SQUARE_LOCATION_ID_FILE=/run/secrets/square-location-id
+      - SQUARE_WEBHOOK_SIGNATURE_KEY_FILE=/run/secrets/square-webhook-signature-key
+      - WEBHOOK_URL=https://checkin.rfitnessbelfast.com/webhook
+      - DATABASE_URL_FILE=/run/secrets/db-url
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`checkin.rfitnessbelfast.com`)"
@@ -47,6 +57,16 @@ services:
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
     depends_on:
       - db
+    entrypoint: [
+        "/bin/sh",
+        "-c",
+        "export POSTGRES_PASSWORD=$$(cat /run/secrets/db-password) && \
+        export DATABASE_URL=$$(cat /run/secrets/db-url) && \
+        export SQUARE_ACCESS_TOKEN=$$(cat /run/secrets/square-access-token) && \
+        export SQUARE_LOCATION_ID=$$(cat /run/secrets/square-location-id) && \
+        export SQUARE_WEBHOOK_SIGNATURE_KEY=$$(cat /run/secrets/square-webhook-signature-key) && \
+        npx --no-install remix-serve build/server/index.js",
+      ]
 
   db:
     image: postgres
@@ -76,4 +96,12 @@ volumes:
 
 secrets:
   db-password:
+    external: true
+  db-url:
+    external: true
+  square-access-token:
+    external: true
+  square-location-id:
+    external: true
+  square-webhook-signature-key:
     external: true

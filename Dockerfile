@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Install dependencies using pnpm
 COPY package.json pnpm-lock.yaml* .npmrc* ./
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN corepack enable && pnpm install 
 
 # Build the Remix application
 FROM base AS builder
