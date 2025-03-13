@@ -1,12 +1,13 @@
 # Base stage for Node.js setup
 FROM node:22-slim AS base
 
-# Install dependencies only when needed
-FROM base AS deps
+# Install OpenSSL in base to make it available everywhere
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Install dependencies using pnpm
+# Install dependencies only when needed
+FROM base AS deps
 COPY package.json pnpm-lock.yaml* .npmrc* ./
 RUN corepack enable && pnpm install 
 
@@ -16,13 +17,19 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Ensure OpenSSL is installed before running Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 RUN corepack enable && npx prisma generate && pnpm run build
 
-# Production stage 
+# Production stage (use Debian instead of Alpine)
 FROM node:22-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+
+# Install OpenSSL again in the runner stage
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
@@ -42,5 +49,5 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # Run remix-serve
-ENTRYPOINT ["npx prisma generate && npx", "--no-update-notifier", "remix-serve"]
+ENTRYPOINT ["npx", "--no-update-notifier", "remix-serve"]
 CMD ["build/server/index.js"]
