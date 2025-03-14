@@ -4,13 +4,14 @@ import { useActionData, useNavigation } from '@remix-run/react';
 import type { ActionFunctionArgs } from '@remix-run/node';
 import CheckInForm from '~/components/check-in/CheckInForm';
 import CheckInResult from '~/components/check-in/CheckInResult';
+import Logo from '~/components/common/Logo';
 import { verifyMembership } from '~/utils/square.server';
 import { isSquareConfigured, getEnv } from '~/utils/env.server';
 import { createSystemLog } from '~/models/system-log.server';
 import { createCheckIn } from '~/models/check-in.server';
 import { getCustomerByPhoneNumber, upsertCustomer } from '~/models/customer.server';
 import type { CheckInResult as CheckInResultType } from '~/types';
-import { emitCheckInEvent } from '~/utils/sse.server';
+import { formatPhoneNumberForApi } from '~/utils/formatters.server';
 
 // Mock data for development when Square is not configured
 const MOCK_SUCCESS_RESULT: CheckInResultType = {
@@ -39,7 +40,7 @@ const MOCK_FAILURE_RESULT: CheckInResultType = {
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
-  const phoneNumber = formData.get('phoneNumber') as string;
+  let phoneNumber = formData.get('phoneNumber') as string;
   const env = getEnv();
   const locationId = env.SQUARE_LOCATION_ID || 'default-location';
 
@@ -59,6 +60,25 @@ export async function action({ request }: ActionFunctionArgs) {
       error: 'MISSING_PHONE_NUMBER'
     });
   }
+
+  // Format the phone number for the Square API (E.164 format)
+  // Remove all non-digit characters
+  const cleaned = phoneNumber.replace(/\D/g, '');
+  
+  // If it's a UK number starting with 0, convert to +44
+  if (cleaned.startsWith('0') && cleaned.length === 11) {
+    phoneNumber = '+44' + cleaned.substring(1);
+  }
+  // If it already has the country code (44) but no +, add it
+  else if (cleaned.startsWith('44') && cleaned.length === 12) {
+    phoneNumber = '+' + cleaned;
+  }
+  // If it doesn't start with +, assume it's a UK number and add +44
+  else if (!phoneNumber.startsWith('+')) {
+    phoneNumber = '+44' + cleaned;
+  }
+
+  console.log('Formatted phone number:', phoneNumber);
 
   try {
     // Check if Square is configured
@@ -102,7 +122,7 @@ export async function action({ request }: ActionFunctionArgs) {
             locationId
           });
           
-          // Emit check-in event for real-time notifications
+          // Create a check-in record object
           const checkInRecord = {
             id: checkIn.id.toString(),
             timestamp: checkIn.checkInTime.toISOString(),
@@ -119,7 +139,47 @@ export async function action({ request }: ActionFunctionArgs) {
               .substring(0, 2)
           };
           
-          emitCheckInEvent(checkInRecord);
+          // Log the check-in event to the system logs for polling to pick up
+          await createSystemLog({
+            message: `Check-in successful for ${customer.name}`,
+            eventType: 'check_in',
+            severity: 'info',
+            details: {
+              ...checkInRecord,
+              customerId: customer.id,
+              locationId
+            }
+          });
+        } else {
+          // Create a failed check-in record object
+          const checkInRecord = {
+            id: Date.now().toString(),
+            timestamp: new Date().toISOString(),
+            customerName: customer.name,
+            phoneNumber: customer.phoneNumber || '',
+            success: false,
+            membershipType: customer.membershipType || 'Unknown',
+            message: mockResult.message || 'Check-in failed',
+            nextPayment: '',
+            initials: customer.name
+              .split(' ')
+              .map(name => name[0])
+              .join('')
+              .substring(0, 2)
+          };
+          
+          // Log the failed check-in event to the system logs for polling to pick up
+          await createSystemLog({
+            message: `Check-in failed for ${customer.name}: ${mockResult.message}`,
+            eventType: 'check_in',
+            severity: 'warning',
+            details: {
+              ...checkInRecord,
+              customerId: customer.id,
+              error: mockResult.error,
+              locationId
+            }
+          });
         }
       }
       
@@ -164,7 +224,7 @@ export async function action({ request }: ActionFunctionArgs) {
           locationId
         });
         
-        // Emit check-in event for real-time notifications
+        // Create a check-in record object
         const checkInRecord = {
           id: checkIn.id.toString(),
           timestamp: checkIn.checkInTime.toISOString(),
@@ -181,9 +241,19 @@ export async function action({ request }: ActionFunctionArgs) {
             .substring(0, 2)
         };
         
-        emitCheckInEvent(checkInRecord);
+        // Log the check-in event to the system logs for polling to pick up
+        await createSystemLog({
+          message: `Check-in successful for ${customer.name}`,
+          eventType: 'check_in',
+          severity: 'info',
+          details: {
+            ...checkInRecord,
+            customerId: customer.id,
+            locationId
+          }
+        });
       } else {
-        // Emit failed check-in event
+        // Create a failed check-in record object
         const checkInRecord = {
           id: Date.now().toString(),
           timestamp: new Date().toISOString(),
@@ -200,7 +270,18 @@ export async function action({ request }: ActionFunctionArgs) {
             .substring(0, 2)
         };
         
-        emitCheckInEvent(checkInRecord);
+        // Log the failed check-in event to the system logs for polling to pick up
+        await createSystemLog({
+          message: `Check-in failed for ${customer.name}: ${result.message}`,
+          eventType: 'check_in',
+          severity: 'warning',
+          details: {
+            ...checkInRecord,
+            customerId: customer.id,
+            error: result.error,
+            locationId
+          }
+        });
       }
     }
     
@@ -250,8 +331,8 @@ export default function CheckInPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-4">
-      <div className="mb-8 w-48">
-        <img src="/logo-light.png" alt="Gym Logo" className="w-full" />
+      <div className="mb-8">
+        <Logo />
       </div>
       
       <div className="w-full rounded-lg bg-white p-6 shadow-lg">

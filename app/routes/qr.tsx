@@ -13,7 +13,7 @@ export default function QRCode() {
     // Create a link element and trigger download of the static QR code
     const link = document.createElement('a');
     link.download = 'gym-checkin-qr.png';
-    link.href = '/gym-checkin-qr.png'; // Path to the static QR code image
+    link.href = `/gym-checkin-qr.png?t=${Date.now()}`; // Add cache-busting parameter
     link.click();
   };
   
@@ -28,7 +28,7 @@ export default function QRCode() {
         <div className="flex flex-col items-center">
           {/* Display the static QR code image */}
           <img 
-            src="/gym-checkin-qr.png" 
+            src={`/gym-checkin-qr.png?t=${Date.now()}`} // Add cache-busting parameter
             alt="Check-in QR Code" 
             width={300} 
             height={300} 

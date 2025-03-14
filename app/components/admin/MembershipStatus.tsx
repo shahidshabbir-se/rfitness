@@ -1,9 +1,22 @@
 interface MembershipStatusProps {
   activeMembers: number;
   needsRenewal: number;
+  membersNeedingRenewal: Array<{
+    id: string;
+    name: string;
+    phoneNumber: string;
+    membershipType: string;
+    expiryDate: string;
+    status: string;
+    initials: string;
+  }>;
 }
 
-export default function MembershipStatus({ activeMembers, needsRenewal }: MembershipStatusProps) {
+export default function MembershipStatus({ 
+  activeMembers, 
+  needsRenewal,
+  membersNeedingRenewal 
+}: MembershipStatusProps) {
   return (
     <div>
       <h2 className="mb-4 text-xl font-semibold text-gray-800">Membership Status Tracking</h2>
@@ -52,45 +65,46 @@ export default function MembershipStatus({ activeMembers, needsRenewal }: Member
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {/* Mock data for members needing renewal */}
-              <tr>
-                <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                  Alex Johnson
-                </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                  +44 770 123 4567
-                </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                  Monthly Subscription (£25)
-                </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                  {new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm">
-                  <span className="inline-flex rounded-full bg-red-100 px-2 text-xs font-semibold leading-5 text-red-800">
-                    Expired
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                  Emma Wilson
-                </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                  +44 770 234 5678
-                </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                  Cash Payment (£30)
-                </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                  {new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                </td>
-                <td className="whitespace-nowrap px-6 py-4 text-sm">
-                  <span className="inline-flex rounded-full bg-yellow-100 px-2 text-xs font-semibold leading-5 text-yellow-800">
-                    Expiring Soon
-                  </span>
-                </td>
-              </tr>
+              {membersNeedingRenewal.length > 0 ? (
+                membersNeedingRenewal.map((member) => (
+                  <tr key={member.id}>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                      <div className="flex items-center">
+                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-500">
+                          {member.initials}
+                        </div>
+                        <div className="ml-3">
+                          {member.name}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                      {member.phoneNumber}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                      {member.membershipType}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                      {new Date(member.expiryDate).toLocaleDateString()}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                        member.status === 'Expired' 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {member.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                    No members currently need renewal
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

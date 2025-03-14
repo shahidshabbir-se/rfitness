@@ -1,53 +1,45 @@
-# Base stage for Node.js setup
+# --- Base Image (Common Setup) ---
 FROM node:22-slim AS base
-
-# Install OpenSSL in base to make it available everywhere
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
-# Install dependencies only when needed
+# Install dependencies separately to optimize caching
 FROM base AS deps
-COPY package.json pnpm-lock.yaml* .npmrc* ./
-RUN corepack enable && pnpm install 
+COPY package.json pnpm-lock.yaml* ./
+RUN corepack enable && pnpm install --frozen-lockfile --ignore-scripts
 
-# Build the Remix application
+# --- Build Stage (Compiles the Remix App) ---
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Ensure OpenSSL is installed before running Prisma
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# Generate Prisma client (DO NOT RUN MIGRATIONS)
+RUN corepack enable && pnpm install prisma --ignore-scripts
+RUN npx prisma generate && pnpm run build
 
-RUN corepack enable && npx prisma generate && pnpm run build
-
-# Production stage (use Debian instead of Alpine)
+# --- Production Image (Minimal & Secure) ---
 FROM node:22-slim AS runner
 WORKDIR /app
 
+# Set environment variables (Database must be set in runtime)
 ENV NODE_ENV=production
-
-# Install OpenSSL again in the runner stage
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 # Create a non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
   adduser --system --uid 1001 remix
 
-# Copy only necessary build output
+# Copy only the necessary build files (DO NOT COPY PRISMA)
 COPY --from=builder --chown=remix:nodejs /app/build ./build
 COPY --from=builder --chown=remix:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=remix:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=remix:nodejs /app/prisma ./prisma
 
-# Set correct permissions for the non-root user
+# Set user permissions
 USER remix
 
+# Expose port for GHCR deployments
 EXPOSE 3000
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
 
-# Run remix-serve
-ENTRYPOINT ["npx", "--no-update-notifier", "remix-serve"]
-CMD ["build/server/index.js"]
+# Start the Remix server (Database must be available externally)
+CMD ["pnpm", "start"]

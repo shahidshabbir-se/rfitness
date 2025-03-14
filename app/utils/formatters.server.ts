@@ -51,7 +51,7 @@ export function formatDate(date: Date | string): string {
 }
 
 /**
- * Formats a phone number for display
+ * Format a phone number for display
  */
 export function formatPhoneNumber(phoneNumber: string): string {
   if (!phoneNumber) return '';
@@ -68,4 +68,32 @@ export function formatPhoneNumber(phoneNumber: string): string {
   
   // Return as-is if we can't format it
   return phoneNumber;
+}
+
+/**
+ * Format a phone number for Square API (E.164 format)
+ */
+export function formatPhoneNumberForApi(phoneNumber: string): string {
+  if (!phoneNumber) return '';
+  
+  // Remove all non-digit characters
+  const cleaned = phoneNumber.replace(/\D/g, '');
+  
+  // If it's a UK number starting with 0, convert to +44
+  if (cleaned.startsWith('0') && cleaned.length === 11) {
+    return '+44' + cleaned.substring(1);
+  }
+  
+  // If it already has the country code (44) but no +, add it
+  if (cleaned.startsWith('44') && cleaned.length === 12) {
+    return '+' + cleaned;
+  }
+  
+  // If it already has a +, return as is
+  if (phoneNumber.startsWith('+')) {
+    return phoneNumber;
+  }
+  
+  // Default: assume it's a UK number and add +44
+  return '+44' + cleaned;
 }

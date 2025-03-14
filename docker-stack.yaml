@@ -33,6 +33,7 @@ services:
       - square-access-token
       - square-location-id
       - square-webhook-signature-key
+      - session-secret
     environment:
       - POSTGRES_HOST=db
       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
@@ -40,6 +41,7 @@ services:
       - POSTGRES_DB=app
       - POSTGRES_PORT=5432
       - POSTGRES_SSLMODE=disable
+      - SESSION_SECRET_FILE=/run/secrets/session-secret
       - SQUARE_ENVIRONMENT=production
       - SQUARE_ACCESS_TOKEN_FILE=/run/secrets/square-access-token
       - SQUARE_LOCATION_ID_FILE=/run/secrets/square-location-id
@@ -105,4 +107,6 @@ secrets:
   square-location-id:
     external: true
   square-webhook-signature-key:
+    external: true
+  session-secret:
     external: true

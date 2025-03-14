@@ -14,12 +14,12 @@ export const meta: MetaFunction = () => {
 export async function loader({ request }: LoaderFunctionArgs) {
   const session = await getAdminSession(request);
   const isAdmin = session.get("isAdmin");
-
+  
   // If already logged in, redirect to admin dashboard
   if (isAdmin) {
     return redirect("/admin");
   }
-
+  
   return null;
 }
 
@@ -27,17 +27,17 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const username = formData.get('username')?.toString();
   const password = formData.get('password')?.toString();
-
+  
   // Get the URL to redirect to after login
   const url = new URL(request.url);
   const redirectTo = url.searchParams.get("redirectTo") || "/admin";
-
+  
   // Production credentials
   if (username === 'gymuser' && password === '80kgdumbb3ll!') {
     return createAdminSession(redirectTo);
   }
-
-  return json({
+  
+  return json({ 
     error: 'Invalid username or password',
     fields: { username }
   });
@@ -50,7 +50,7 @@ export default function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") || "/admin";
-
+  
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-100">
       <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-lg">
@@ -58,7 +58,7 @@ export default function AdminLogin() {
           <h1 className="text-3xl font-bold text-gray-800">Admin Login</h1>
           <p className="mt-2 text-gray-600">Enter your credentials to access the admin portal</p>
         </div>
-
+        
         {actionData?.error && (
           <div className="mb-4 rounded-md bg-red-50 p-4">
             <div className="flex">
@@ -73,7 +73,7 @@ export default function AdminLogin() {
             </div>
           </div>
         )}
-
+        
         <Form method="post">
           <input type="hidden" name="redirectTo" value={redirectTo} />
           <div className="space-y-4">
@@ -93,7 +93,7 @@ export default function AdminLogin() {
                 />
               </div>
             </div>
-
+            
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
@@ -125,7 +125,7 @@ export default function AdminLogin() {
                 </button>
               </div>
             </div>
-
+            
             <div>
               <button
                 type="submit"
@@ -137,7 +137,7 @@ export default function AdminLogin() {
             </div>
           </div>
         </Form>
-
+        
         <div className="mt-6 text-center">
           <Link to="/" className="text-sm text-blue-600 hover:text-blue-800">
             Back to Home

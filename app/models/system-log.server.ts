@@ -46,7 +46,8 @@ export async function getSystemLogs({
   severity,
   eventType,
   startDate,
-  endDate
+  endDate,
+  after
 }: {
   page?: number;
   limit?: number;
@@ -54,6 +55,7 @@ export async function getSystemLogs({
   eventType?: string;
   startDate?: Date;
   endDate?: Date;
+  after?: Date;
 } = {}) {
   const skip = (page - 1) * limit;
   
@@ -68,11 +70,17 @@ export async function getSystemLogs({
     where.eventType = eventType;
   }
   
-  if (startDate || endDate) {
+  if (startDate || endDate || after) {
     where.timestamp = {};
     
     if (startDate) {
       where.timestamp.gte = startDate;
+    }
+    
+    if (after) {
+      if (!where.timestamp.gte || after > where.timestamp.gte) {
+        where.timestamp.gte = after;
+      }
     }
     
     if (endDate) {

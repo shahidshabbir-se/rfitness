@@ -1,3 +1,12 @@
+/**
+ * @deprecated This entire module is deprecated and will be removed in a future version.
+ * The application has switched from SSE to polling for real-time updates.
+ * See /api/recent-events.tsx for the new implementation.
+ * 
+ * This file is kept temporarily for backward compatibility but will be removed.
+ * Do not use any functions from this file in new code.
+ */
+
 import type { CheckInRecord } from '~/types';
 
 // Define the event emitter type
@@ -6,11 +15,14 @@ type SendFunction = (event: string, data: any) => void;
 // Define event types
 export type SSEEventType = 'check-in' | 'webhook' | 'customer-update' | 'subscription-update';
 
-// Create a global event emitter for check-in events
+/**
+ * @deprecated Do not use this class in new code.
+ */
 class CheckInEventEmitter {
   private listeners: Set<SendFunction> = new Set();
 
   addListener(listener: SendFunction) {
+    console.warn('SSE is deprecated. Use polling with /api/recent-events instead.');
     this.listeners.add(listener);
   }
 
@@ -19,16 +31,19 @@ class CheckInEventEmitter {
   }
 
   emit(eventType: SSEEventType, data: any) {
-    this.listeners.forEach(listener => {
-      listener(eventType, data);
-    });
+    console.warn('SSE is deprecated. Use polling with /api/recent-events instead.');
+    console.log(`[Deprecated] SSE event emitted: ${eventType}`, data);
   }
 }
 
 // Create a singleton instance of the event emitter
 let eventEmitterInstance: CheckInEventEmitter | null = null;
 
+/**
+ * @deprecated Do not use this function in new code.
+ */
 function getEventEmitter(): CheckInEventEmitter {
+  console.warn('SSE is deprecated. Use polling with /api/recent-events instead.');
   if (!eventEmitterInstance) {
     eventEmitterInstance = new CheckInEventEmitter();
   }
@@ -37,8 +52,11 @@ function getEventEmitter(): CheckInEventEmitter {
 
 /**
  * Create a server-sent event stream
+ * @deprecated Do not use this function in new code. Use polling with /api/recent-events instead.
  */
 export function eventStream(signal: AbortSignal, callback: (send: SendFunction) => () => void) {
+  console.warn('SSE is deprecated. Use polling with /api/recent-events instead.');
+  
   // Set up headers for SSE
   const headers = new Headers({
     'Content-Type': 'text/event-stream',
@@ -56,7 +74,11 @@ export function eventStream(signal: AbortSignal, callback: (send: SendFunction) 
       };
 
       // Send initial connection established event
-      send('connected', { message: 'Connection established' });
+      send('connected', { 
+        message: 'Connection established',
+        deprecated: true,
+        alternativeEndpoint: '/api/recent-events'
+      });
 
       // Set up ping interval to keep connection alive
       const pingInterval = setInterval(() => {
@@ -85,19 +107,18 @@ export function eventStream(signal: AbortSignal, callback: (send: SendFunction) 
 
 /**
  * Emit a check-in event to all connected clients
+ * @deprecated Do not use this function in new code. Events are now stored in the database for polling.
  */
 export function emitCheckInEvent(checkInRecord: CheckInRecord) {
-  const emitter = getEventEmitter();
-  emitter.emit('check-in', checkInRecord);
+  console.warn('SSE is deprecated. Use polling with /api/recent-events instead.');
+  console.log('[Deprecated] Check-in event emitted:', checkInRecord.id);
 }
 
 /**
  * Emit a webhook event to all connected clients
+ * @deprecated Do not use this function in new code. Events are now stored in the database for polling.
  */
 export function emitWebhookEvent(eventType: 'customer-update' | 'subscription-update', data: any) {
-  const emitter = getEventEmitter();
-  emitter.emit(eventType, {
-    timestamp: new Date().toISOString(),
-    ...data
-  });
+  console.warn('SSE is deprecated. Use polling with /api/recent-events instead.');
+  console.log(`[Deprecated] Webhook event emitted: ${eventType}`);
 } 

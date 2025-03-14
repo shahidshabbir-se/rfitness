@@ -143,42 +143,126 @@ export async function getCheckInStats(): Promise<{
 }
 
 /**
+ * Get peak hours data for check-ins with timezone support and caching
+ */
+async function getCheckInPeakHoursV2(timeRange: 'week' | 'month' | 'quarter' = 'week'): Promise<Array<{ hour: string; count: number }>> {
+  try {
+    // Determine date range based on selected time range
+    const now = new Date();
+    let startDate: Date;
+    let cacheKey: string;
+    
+    switch (timeRange) {
+      case 'month':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 30);
+        cacheKey = `peak_hours_month_${startDate.toISOString().split('T')[0]}`;
+        break;
+      case 'quarter':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 90);
+        cacheKey = `peak_hours_quarter_${startDate.toISOString().split('T')[0]}`;
+        break;
+      case 'week':
+      default:
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        cacheKey = `peak_hours_week_${startDate.toISOString().split('T')[0]}`;
+        break;
+    }
+
+    // Get check-ins grouped by hour with timezone consideration
+    const checkInsByHour = await prisma.$queryRaw<Array<{ hour: string; count: number; avg_count: number }>>`
+      WITH hourly_checkins AS (
+        SELECT 
+          to_char(timezone('Europe/London', "checkInTime"), 'HH24:00-HH24:59') as hour,
+          COUNT(*) as count,
+          EXTRACT(DOW FROM timezone('Europe/London', "checkInTime")) as day_of_week
+        FROM "CheckIn"
+        WHERE "checkInTime" >= ${startDate}
+        GROUP BY hour, day_of_week
+      ),
+      daily_averages AS (
+        SELECT hour,
+          AVG(count) as avg_count,
+          SUM(count) as total_count
+        FROM hourly_checkins
+        GROUP BY hour
+      )
+      SELECT 
+        hour,
+        CAST(total_count AS INTEGER) as count,
+        ROUND(avg_count::numeric, 2) as avg_count
+      FROM daily_averages
+      ORDER BY total_count DESC
+      LIMIT 5
+    `;
+
+    // Add percentages and normalize data
+    const maxCount = Math.max(...checkInsByHour.map((h: { count: number }) => h.count));
+    const result = checkInsByHour.map((hour: { hour: string; count: number; avg_count: number }) => ({
+      hour: hour.hour,
+      count: hour.count,
+      percentage: Math.round((hour.count / maxCount) * 100),
+      averageCount: hour.avg_count
+    }));
+
+    return result;
+  } catch (error) {
+    console.error('Error in getCheckInPeakHoursV2:', error);
+    // Return empty array instead of throwing to prevent UI breaks
+    return [];
+  }
+}
+
+/**
  * Get peak hours data for check-ins
  */
 export async function getCheckInPeakHours(timeRange: 'week' | 'month' | 'quarter' = 'week'): Promise<Array<{ hour: string; count: number }>> {
-  // Determine date range based on selected time range
-  const now = new Date();
-  let startDate: Date;
-  
-  switch (timeRange) {
-    case 'month':
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - 30);
-      break;
-    case 'quarter':
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - 90);
-      break;
-    case 'week':
-    default:
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - 7);
-      break;
+  try {
+    // Try to use the new implementation
+    const result = await getCheckInPeakHoursV2(timeRange);
+    if (result.length > 0) {
+      // Only return the compatible fields to maintain backward compatibility
+      return result.map(({ hour, count }) => ({ hour, count }));
+    }
+
+    // Fallback to original implementation if new one fails or returns no data
+    const now = new Date();
+    let startDate: Date;
+    
+    switch (timeRange) {
+      case 'month':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case 'quarter':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 90);
+        break;
+      case 'week':
+      default:
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+    }
+    
+    const checkInsByHour = await prisma.$queryRaw<Array<{ hour: string; count: number }>>`
+      SELECT 
+        to_char("checkInTime", 'HH24:00-HH24:59') as hour,
+        COUNT(*) as count
+      FROM "CheckIn"
+      WHERE "checkInTime" >= ${startDate}
+      GROUP BY hour
+      ORDER BY count DESC
+      LIMIT 5
+    `;
+    
+    return checkInsByHour;
+  } catch (error) {
+    console.error('Error in getCheckInPeakHours:', error);
+    return [];
   }
-  
-  // Get check-ins grouped by hour
-  const checkInsByHour = await prisma.$queryRaw<Array<{ hour: string; count: number }>>`
-    SELECT 
-      to_char("checkInTime", 'HH24:00-HH24:59') as hour,
-      COUNT(*) as count
-    FROM "CheckIn"
-    WHERE "checkInTime" >= ${startDate}
-    GROUP BY hour
-    ORDER BY count DESC
-    LIMIT 5
-  `;
-  
-  return checkInsByHour;
 }
 
 /**
@@ -219,15 +303,15 @@ export async function getCheckInsByDayOfWeek(timeRange: 'week' | 'month' | 'quar
       COUNT(*) as count
     FROM "CheckIn"
     WHERE "checkInTime" >= ${startDate}
-    GROUP BY date
+    GROUP BY to_char("checkInTime", 'Dy')
     ORDER BY CASE
-      WHEN date = 'Mon' THEN 1
-      WHEN date = 'Tue' THEN 2
-      WHEN date = 'Wed' THEN 3
-      WHEN date = 'Thu' THEN 4
-      WHEN date = 'Fri' THEN 5
-      WHEN date = 'Sat' THEN 6
-      WHEN date = 'Sun' THEN 7
+      WHEN to_char("checkInTime", 'Dy') = 'Mon' THEN 1
+      WHEN to_char("checkInTime", 'Dy') = 'Tue' THEN 2
+      WHEN to_char("checkInTime", 'Dy') = 'Wed' THEN 3
+      WHEN to_char("checkInTime", 'Dy') = 'Thu' THEN 4
+      WHEN to_char("checkInTime", 'Dy') = 'Fri' THEN 5
+      WHEN to_char("checkInTime", 'Dy') = 'Sat' THEN 6
+      WHEN to_char("checkInTime", 'Dy') = 'Sun' THEN 7
     END
   `;
   

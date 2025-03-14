@@ -3,7 +3,7 @@ name: Deploy rfitness
 on:
   push:
     branches:
-      - "my-prod2"
+      - "main"
 
 permissions:
   packages: write

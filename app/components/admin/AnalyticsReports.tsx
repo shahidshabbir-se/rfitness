@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from '@remix-run/react';
 
+interface PeakHourData {
+  hour: string;
+  count: number;
+  percentage?: number;
+  averageCount?: number;
+}
+
 interface AnalyticsReportsProps {
   analytics: {
-    peakHours: Array<{ hour: string; count: number }>;
+    peakHours: Array<PeakHourData>;
     topMembers: Array<{ name: string; checkIns: number }>;
     checkInsByDay: Array<{ date: string; count: number }>;
     membershipTypes: Array<{ type: string; count: number }>;
@@ -26,8 +33,13 @@ export default function AnalyticsReports({
   const location = useLocation();
   const [selectedTimeRange, setSelectedTimeRange] = useState(timeRange);
   
-  // Extract data from props
-  const { peakHours, topMembers, checkInsByDay, membershipTypes } = analytics;
+  // Extract data from props with default values for safety
+  const { 
+    peakHours = [], 
+    topMembers = [], 
+    checkInsByDay = [], 
+    membershipTypes = [] 
+  } = analytics || {};
   
   // Handle time range change
   const handleTimeRangeChange = (newTimeRange: string) => {
@@ -45,13 +57,13 @@ export default function AnalyticsReports({
   }, [timeRange]);
   
   // Filter out any trial members from membership types
-  const filteredMembershipTypes = membershipTypes.length > 0 
-    ? membershipTypes.filter(type => type.type !== 'Trial')
+  const filteredMembershipTypes = membershipTypes && membershipTypes.length > 0 
+    ? membershipTypes.filter(type => type && type.type !== 'Trial')
     : [];
   
   // Calculate max values for scaling
-  const maxCheckInCount = Math.max(...checkInsByDay.map(day => day.count || 0), 1);
-  const totalMembers = filteredMembershipTypes.reduce((sum, type) => sum + type.count, 0);
+  const maxCheckInCount = Math.max(...(checkInsByDay || []).map(day => (day && day.count) || 0), 1);
+  const totalMembers = (filteredMembershipTypes || []).reduce((sum, type) => sum + (type && type.count || 0), 0);
   
   // Function to handle exporting analytics data
   const handleExportReports = () => {
@@ -163,20 +175,32 @@ export default function AnalyticsReports({
         <div className="rounded-lg border border-gray-200 p-4">
           <h3 className="mb-3 text-lg font-medium text-gray-800">Peak Hours</h3>
           <div className="space-y-3">
-            {peakHours.map((hour, index) => (
-              <div key={index} className="flex items-center">
-                <div className="w-24 text-sm text-gray-600">{hour.hour}</div>
-                <div className="flex-1">
-                  <div className="relative h-4 w-full overflow-hidden rounded-full bg-gray-200">
-                    <div 
-                      className="absolute h-full rounded-full bg-blue-600 transition-all duration-500 ease-in-out" 
-                      style={{ width: `${(hour.count / Math.max(...peakHours.map(h => h.count))) * 100}%` }}
-                    ></div>
+            {peakHours.map((hour, index) => {
+              // Calculate percentage if not provided (backward compatibility)
+              const percentage = hour.percentage ?? Math.round((hour.count / Math.max(...peakHours.map(h => h.count))) * 100);
+              
+              return (
+                <div key={index} className="flex items-center">
+                  <div className="w-24 text-sm text-gray-600">{hour.hour}</div>
+                  <div className="flex-1">
+                    <div className="relative h-4 w-full overflow-hidden rounded-full bg-gray-200">
+                      <div 
+                        className="absolute h-full rounded-full bg-blue-600 transition-all duration-500 ease-in-out" 
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div className="ml-3 flex flex-col items-end">
+                    <div className="text-sm font-medium text-gray-900">{hour.count}</div>
+                    {hour.averageCount && (
+                      <div className="text-xs text-gray-500">
+                        avg: {hour.averageCount}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="ml-3 w-10 text-right text-sm font-medium text-gray-900">{hour.count}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         
