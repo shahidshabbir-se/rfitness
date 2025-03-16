@@ -286,7 +286,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Get members needing renewal
     const membersNeedingRenewalData = await getMembersNeedingRenewal();
 
-    return Response.json(
+    return json(
       JSON.parse(
         JSON.stringify(
           {
