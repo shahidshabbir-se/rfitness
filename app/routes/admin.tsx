@@ -2,11 +2,11 @@ import { json, redirect, type LoaderFunctionArgs } from '@remix-run/node';
 import { useLoaderData, Link, useFetcher } from '@remix-run/react';
 import { useState, useEffect, useCallback } from 'react';
 import { getEnv } from '~/utils/env.server';
-import type { 
-  CheckInRecord, 
-  WebhookStatusData, 
-  Member, 
-  SystemStatusData, 
+import type {
+  CheckInRecord,
+  WebhookStatusData,
+  Member,
+  SystemStatusData,
   AnalyticsData,
   RecentActivityData
 } from '~/types';
@@ -36,19 +36,19 @@ import RecentActivity from '~/components/admin/RecentActivity';
 export async function loader({ request }: LoaderFunctionArgs) {
   // Require admin authentication
   await requireAdmin(request);
-  
+
   try {
     const env = getEnv();
-    
+
     // Get time range from URL if provided
     const url = new URL(request.url);
     const timeRange = (url.searchParams.get('timeRange') || 'week') as 'week' | 'month' | 'quarter';
-    
+
     // Check if this is a recent-events request
     const since = url.searchParams.get('since');
     const limit = parseInt(url.searchParams.get('limit') || '10', 10);
     const isRecentEventsRequest = url.searchParams.has('since');
-    
+
     if (isRecentEventsRequest) {
       // This is a request for recent events (polling)
       // Parse the since timestamp or use a recent default
@@ -64,10 +64,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
         sinceDate = new Date();
         sinceDate.setMinutes(sinceDate.getMinutes() - 5); // Last 5 minutes
       }
-      
+
       // Get recent check-ins from database
       const checkInsData = await getRecentCheckIns(1, limit);
-      
+
       // Get recent system logs for customer and subscription updates
       const { logs: customerLogs } = await getSystemLogs({
         page: 1,
@@ -75,14 +75,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
         eventType: 'customer_webhook',
         after: sinceDate
       });
-      
+
       const { logs: subscriptionLogs } = await getSystemLogs({
         page: 1,
         limit,
         eventType: 'subscription_webhook',
         after: sinceDate
       });
-      
+
       // Transform check-ins to the expected format
       const checkInRecords: CheckInRecord[] = checkInsData.checkIns
         .filter((checkIn: any) => new Date(checkIn.checkInTime) > sinceDate)
@@ -101,7 +101,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
             .join('')
             .substring(0, 2)
         }));
-      
+
       // Transform customer logs to the expected format
       const customerEvents = customerLogs.map((log: any) => ({
         id: `customer-update-${log.id}`,
@@ -112,12 +112,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
         membershipType: 'Update',
         message: `Customer ${log.details?.eventType?.split('.')?.[1] || 'updated'}: ${log.details?.customerName || 'Unknown'}`,
         nextPayment: '',
-        initials: log.details?.customerName 
-          ? log.details.customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2) 
+        initials: log.details?.customerName
+          ? log.details.customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2)
           : 'CU',
         eventType: 'customer-update'
       }));
-      
+
       // Transform subscription logs to the expected format
       const subscriptionEvents = subscriptionLogs.map((log: any) => ({
         id: `subscription-update-${log.id}`,
@@ -131,17 +131,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
         initials: 'SU',
         eventType: 'subscription-update'
       }));
-      
+
       // Combine all events and sort by timestamp (newest first)
       const allEvents = [...checkInRecords, ...customerEvents, ...subscriptionEvents]
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      
+
       // Get webhook status for the response
       const webhookStatus: WebhookStatusData = getWebhookStatus();
-      
+
       // Get check-in system status
       const systemStatus: SystemStatusData = await getCheckInSystemStatus();
-      
+
       return json({
         events: allEvents,
         timestamp: new Date().toISOString(),
@@ -176,34 +176,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
         needsRenewalCount: 0
       });
     }
-    
+
     // Regular admin dashboard request
     // Get real webhook status
     const webhookStatus: WebhookStatusData = getWebhookStatus();
-    
+
     // Get check-in system status
     const systemStatus: SystemStatusData = await getCheckInSystemStatus();
-    
+
     // Get real data from database
     const checkInsData = await getRecentCheckIns(1, 50);
     const checkInStats = await getCheckInStats();
-    
+
     // Get customer data
     const customersData = await getAllCustomers(1, 100);
     const customerStats = await getCustomerStats();
-    
+
     // Get analytics data
     const peakHours = await getCheckInPeakHours(timeRange);
     const checkInsByDay = await getCheckInsByDayOfWeek(timeRange);
     const memberMetrics = await getMemberMetrics(timeRange);
-    
+
     // Get recent system logs for activity
-    const { logs: recentLogs } = await getSystemLogs({ 
-      page: 1, 
+    const { logs: recentLogs } = await getSystemLogs({
+      page: 1,
       limit: 20,
       eventType: 'check_in'
     });
-    
+
     // Transform database data to match expected formats
     const checkIns: CheckInRecord[] = checkInsData.checkIns.map((checkIn: any) => ({
       id: checkIn.id.toString(),
@@ -220,21 +220,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
         .join('')
         .substring(0, 2)
     }));
-    
+
     const members: Member[] = customersData.customers.map((customer: any) => {
       // Find the most recent check-in for this customer
-      const lastCheckIn = customer.checkIns && customer.checkIns.length > 0 
-        ? customer.checkIns[0].checkInTime 
+      const lastCheckIn = customer.checkIns && customer.checkIns.length > 0
+        ? customer.checkIns[0].checkInTime
         : null;
-      
+
       // Calculate visits this month
       const visitsThisMonth = customer._count?.checkIns || 0;
-      
+
       // Determine status based on membershipType
       const status = customer.membershipType === 'Active' || customer.membershipType === 'Monthly Subscription (£25)' || customer.membershipType === 'Cash Payment (£30)'
         ? 'Active'
         : 'Inactive';
-      
+
       return {
         id: customer.id,
         name: customer.name,
@@ -251,16 +251,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
           .substring(0, 2)
       };
     });
-    
+
     // Create analytics data from our stats
     const analytics: AnalyticsData = {
       totalCheckIns: checkInStats.total,
       activeMembers: customerStats.activeCustomers,
       needsRenewal: 0, // We don't have this information yet
-      
+
       // Use real peak hours data
       peakHours: peakHours || [],
-      
+
       // Get top members by check-in count
       topMembers: members
         .sort((a, b) => b.visitsThisMonth - a.visitsThisMonth)
@@ -269,35 +269,42 @@ export async function loader({ request }: LoaderFunctionArgs) {
           name: member.name,
           checkIns: member.visitsThisMonth
         })),
-      
+
       // Use real check-ins by day data
       checkInsByDay: checkInsByDay || [],
-      
+
       // Use real membership type data
       membershipTypes: customerStats.membershipTypes ? customerStats.membershipTypes.map((type: any) => ({
         type: type.type || 'Unknown',
         count: type.count || 0
       })) : []
     };
-    
+
     // Get recent activity
     const recentActivity: RecentActivityData = await getRecentActivity();
-    
+
     // Get members needing renewal
     const membersNeedingRenewalData = await getMembersNeedingRenewal();
-    
-    return json({
-      checkIns,
-      members,
-      analytics,
-      systemStatus,
-      webhookStatus,
-      recentActivity,
-      timeRange,
-      memberMetrics,
-      membersNeedingRenewal: membersNeedingRenewalData.members,
-      needsRenewalCount: membersNeedingRenewalData.count
-    });
+
+    return Response.json(
+      JSON.parse(
+        JSON.stringify(
+          {
+            checkIns,
+            members,
+            analytics,
+            systemStatus,
+            webhookStatus,
+            recentActivity,
+            timeRange,
+            memberMetrics,
+            membersNeedingRenewal: membersNeedingRenewalData.members,
+            needsRenewalCount: membersNeedingRenewalData.count
+          },
+          (_, value) => (typeof value === 'bigint' ? value.toString() : value) // Convert BigInt to string
+        )
+      )
+    );
   } catch (error) {
     console.error('Error loading admin data:', error);
     return json({
@@ -347,19 +354,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function AdminDashboard() {
-  const { 
-    checkIns: initialCheckIns, 
-    members: initialMembers, 
-    analytics, 
-    systemStatus, 
-    webhookStatus, 
+  const {
+    checkIns: initialCheckIns,
+    members: initialMembers,
+    analytics,
+    systemStatus,
+    webhookStatus,
     recentActivity,
     timeRange,
     memberMetrics,
     membersNeedingRenewal,
     needsRenewalCount
   } = useLoaderData<typeof loader>();
-  
+
   const fetcher = useFetcher();
   const [activeTab, setActiveTab] = useState('checkIns');
   const [notifications, setNotifications] = useState<CheckInRecord[]>([]);
@@ -367,13 +374,13 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState<Member[]>(initialMembers || []);
   const [lastRefresh, setLastRefresh] = useState<string>(new Date().toISOString());
   const [lastEventTimestamp, setLastEventTimestamp] = useState<string>(new Date().toISOString());
-  
+
   // Function to fetch fresh data from the server
   const refreshData = useCallback(() => {
     fetcher.load('/admin');
     setLastRefresh(new Date().toISOString());
   }, [fetcher]);
-  
+
   // Update data when fetcher returns new data
   useEffect(() => {
     if (fetcher.data) {
@@ -382,7 +389,7 @@ export default function AdminDashboard() {
       if (data.members) setMembers(data.members);
     }
   }, [fetcher.data]);
-  
+
   // Set up polling for real-time check-in notifications
   useEffect(() => {
     // Function to fetch recent events
@@ -393,14 +400,14 @@ export default function AdminDashboard() {
         if (!response.ok) {
           throw new Error(`Failed to fetch recent events: ${response.status} ${response.statusText}`);
         }
-        
+
         const data = await response.json();
-        
+
         // Update last event timestamp for next poll
         if (data.timestamp) {
           setLastEventTimestamp(data.timestamp);
         }
-        
+
         // Process events if any
         if (data.events && data.events.length > 0) {
           // Update notifications with new events
@@ -408,18 +415,18 @@ export default function AdminDashboard() {
             const newNotifications = [...data.events, ...prev].slice(0, 5);
             return newNotifications;
           });
-          
+
           // Update check-ins with new check-in events
           const newCheckIns = data.events.filter((event: any) => !event.eventType || event.eventType === 'check-in');
           if (newCheckIns.length > 0) {
             setCheckIns(prev => [...newCheckIns, ...prev]);
           }
-          
+
           // If there are customer or subscription updates, refresh all data
-          const hasUpdates = data.events.some((event: any) => 
+          const hasUpdates = data.events.some((event: any) =>
             event.eventType === 'customer-update' || event.eventType === 'subscription-update'
           );
-          
+
           if (hasUpdates) {
             refreshData();
           }
@@ -428,23 +435,23 @@ export default function AdminDashboard() {
         console.error('Error polling for recent events:', error);
       }
     };
-    
+
     // Initial fetch
     fetchRecentEvents();
-    
+
     // Set up polling interval
     const pollingInterval = setInterval(fetchRecentEvents, 5000); // Poll every 5 seconds
-    
+
     // Clean up on unmount
     return () => {
       clearInterval(pollingInterval);
     };
   }, [lastEventTimestamp, refreshData]);
-  
+
   // Function to manually refresh check-ins
   const handleManualRefresh = () => {
     refreshData();
-    
+
     // Add a refresh message to the check-ins
     const refreshMessage: CheckInRecord = {
       id: 'refresh-' + Date.now().toString(),
@@ -457,10 +464,10 @@ export default function AdminDashboard() {
       nextPayment: '',
       initials: 'SR'
     };
-    
+
     setNotifications((prev) => [refreshMessage, ...prev].slice(0, 5));
   };
-  
+
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="mx-auto max-w-7xl">
@@ -495,60 +502,60 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </div>
-        
+
         {/* Status Cards */}
         <div className="mb-8 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-          <SystemStatusComponent 
-            squareEnvironment={systemStatus?.status === 'ok' ? 'Connected' : 'Error'} 
-            isConfigured={systemStatus?.status === 'ok'} 
+          <SystemStatusComponent
+            squareEnvironment={systemStatus?.status === 'ok' ? 'Connected' : 'Error'}
+            isConfigured={systemStatus?.status === 'ok'}
           />
-          <CheckInSystemStatus 
-            status={systemStatus?.status || 'error'} 
-            lastChecked={systemStatus?.lastChecked || new Date().toISOString()} 
+          <CheckInSystemStatus
+            status={systemStatus?.status || 'error'}
+            lastChecked={systemStatus?.lastChecked || new Date().toISOString()}
           />
           <WebhookStatusComponent webhookStatus={webhookStatus} />
-          <RecentActivity 
+          <RecentActivity
             totalCheckIns={recentActivity?.totalCheckIns || 0}
             activeMembers={recentActivity?.activeMembers || 0}
             todayCheckIns={recentActivity?.todayCheckIns || 0}
             lastUpdated={recentActivity?.lastUpdated || new Date().toISOString()}
           />
         </div>
-        
+
         {/* Notifications */}
         <CheckInNotifications notifications={notifications} />
-        
+
         {/* Main Content */}
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           <div className="border-b border-gray-200">
             <AdminTabs activeTab={activeTab} setActiveTab={setActiveTab} />
           </div>
-          
+
           <div className="mt-6">
             {activeTab === 'checkIns' && (
               <CheckInLog checkIns={checkIns} onRefresh={handleManualRefresh} />
             )}
-            
+
             {activeTab === 'members' && (
               <MembersTab members={members} onRefresh={refreshData} />
             )}
-            
+
             {activeTab === 'membership' && (
-              <MembershipStatus 
-                activeMembers={analytics?.activeMembers || 0} 
+              <MembershipStatus
+                activeMembers={analytics?.activeMembers || 0}
                 needsRenewal={needsRenewalCount || 0}
                 membersNeedingRenewal={membersNeedingRenewal || []}
               />
             )}
-            
+
             {activeTab === 'analytics' && (
-              <AnalyticsReports 
+              <AnalyticsReports
                 analytics={{
                   peakHours: analytics?.peakHours || [],
                   topMembers: analytics?.topMembers || [],
                   checkInsByDay: analytics?.checkInsByDay || [],
                   membershipTypes: analytics?.membershipTypes || []
-                }} 
+                }}
                 timeRange={timeRange}
                 memberMetrics={memberMetrics}
               />

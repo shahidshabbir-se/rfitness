@@ -313,8 +313,8 @@ export async function getMembersNeedingRenewal(): Promise<{
         
         if (subscription) {
           // Check if subscription is about to expire
-          if (subscription.paidUntilDate) {
-            const expiryDate = new Date(subscription.paidUntilDate);
+          if (subscription.charged_through_date) {
+            const expiryDate = new Date(subscription.charged_through_date);
             const now = new Date();
             const daysUntilExpiry = Math.floor((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
             

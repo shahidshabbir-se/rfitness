@@ -52,6 +52,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
       after: sinceDate
     });
     
+    // Get check-in system logs (both successful and failed)
+    const { logs: checkInSystemLogs } = await getSystemLogs({
+      page: 1,
+      limit,
+      eventType: 'check_in',
+      after: sinceDate
+    });
+    
     // Transform check-ins to the expected format
     const checkInRecords: CheckInRecord[] = checkInsData.checkIns
       .filter((checkIn: any) => new Date(checkIn.checkInTime) > sinceDate)
@@ -70,6 +78,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
           .join('')
           .substring(0, 2)
       }));
+    
+    // Transform check-in system logs to the expected format
+    const checkInLogEvents = checkInSystemLogs.map((log: SystemLog) => ({
+      id: `check-in-log-${log.id}`,
+      timestamp: log.timestamp.toISOString(),
+      customerName: log.details?.customerName || log.message.split(' for ')[1] || 'Unknown',
+      phoneNumber: log.details?.phoneNumber || '',
+      success: log.details?.success === true || log.message.includes('successful'),
+      membershipType: log.details?.membershipType || 'Unknown',
+      message: log.message,
+      nextPayment: '',
+      initials: log.details?.customerName 
+        ? log.details.customerName.split(' ').map((n: string) => n[0]).join('').substring(0, 2) 
+        : 'CK',
+      eventType: 'check-in' // Convert check_in to check-in for frontend compatibility
+    }));
     
     // Transform customer logs to the expected format
     const customerEvents = customerLogs.map((log: SystemLog) => ({
@@ -102,7 +126,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }));
     
     // Combine all events and sort by timestamp (newest first)
-    const allEvents = [...checkInRecords, ...customerEvents, ...subscriptionEvents]
+    const allEvents = [...checkInRecords, ...checkInLogEvents, ...customerEvents, ...subscriptionEvents]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     
     return json({
@@ -121,4 +145,4 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // Add a default export to ensure Remix recognizes this as a route
 export default function RecentEventsRoute() {
   return null; // This component won't render anything as it's just an API endpoint
-} 
+}
