@@ -24,6 +24,7 @@ model Customer {
   name           String    @db.VarChar(255)
   phoneNumber    String?   @db.VarChar(20)
   membershipType String?   @db.VarChar(50)
+  nextPayment    String?   @db.VarChar(50)
   checkIns       CheckIn[]
 }
 
