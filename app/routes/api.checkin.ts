@@ -209,7 +209,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const checkInsData = await getRecentCheckIns(1, 50);
     const checkInStats = await getCheckInStats();
 
-    // syncCustomersWithPrisma();
+    syncCustomersWithPrisma();
 
     // Get customer data
     const customersData = await getAllCustomers(1, 100);
@@ -272,7 +272,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
         // Check conditions
         const status =
-          customer.membershipType === "Subscription Based" &&
+          (customer.membershipType === "Subscription Based" ||
+            customer.membershipType === "Cash Payment Based") &&
           nextPaymentDate &&
           nextPaymentDate >= today
             ? "Active"

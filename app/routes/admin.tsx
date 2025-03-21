@@ -125,9 +125,10 @@ export default function AdminDashboard() {
   const [memberMetrics, setMemberMetrics] = useState<MemberMetrics | null>(
     null
   );
-  const [lastEventTimestamp, setLastEventTimestamp] = useState<string>(
-    new Date().toISOString()
-  );
+  const [lastCheckInId, setLastCheckInId] = useState<string | null>(null);
+  const [checkInNotifications, setCheckInNotifications] = useState<
+    CheckInRecord[]
+  >([]);
   const [lastRefresh, setLastRefresh] = useState<string>(
     new Date().toISOString()
   );
@@ -150,13 +151,76 @@ export default function AdminDashboard() {
       setRecentActivity(data.recentActivity);
       setCheckIns(data.checkIns);
       setMembers(data.members);
-      console.log(data.members);
       setAnalytics(data.analytics);
       setMembersNeedingRenewal(data.membersNeedingRenewal);
       setNeedsRenewalCount(data.needsRenewalCount);
       setTimeRange(data.timeRange);
       setMemberMetrics(data.memberMetrics);
       setLastRefresh(new Date().toISOString());
+      if (data.recentActivity?.recentLogs?.length) {
+        // Filter check-in logs
+        const checkInLogs = data.recentActivity.recentLogs
+          .filter((log: any) => log.type === "check_in")
+          .sort((a: any, b: any) => parseInt(b.id) - parseInt(a.id)); // Sort by latest first
+
+        // Remove duplicates: Prefer logs that contain full `details`
+        const uniqueCheckIns = new Map();
+
+        checkInLogs.forEach((log) => {
+          const key = log.id; // Unique key is `id`
+          if (!uniqueCheckIns.has(key) || log.details?.customerName) {
+            uniqueCheckIns.set(key, log); // Store only logs with details
+          }
+        });
+
+        const filteredCheckIns = Array.from(uniqueCheckIns.values()).slice(
+          0,
+          5
+        ); // Keep latest 5 check-ins
+
+        if (data.recentActivity?.recentLogs?.length) {
+          // Filter check-in logs
+          const checkInLogs = data.recentActivity.recentLogs
+            .filter((log: any) => log.type === "check_in")
+            .sort((a: any, b: any) => parseInt(b.id) - parseInt(a.id)); // Sort by latest first
+
+          // Store only unique check-ins by customerId, prioritizing those with full details
+          const uniqueCheckIns = new Map();
+
+          checkInLogs.forEach((log) => {
+            const key = log.details?.customerId || log.id; // Prefer customerId if available
+            if (!uniqueCheckIns.has(key) || log.details?.customerName) {
+              uniqueCheckIns.set(key, log); // Store log only if it has full details
+            }
+          });
+
+          const filteredCheckIns = Array.from(uniqueCheckIns.values()).slice(
+            0,
+            5
+          ); // Keep latest 5 unique check-ins
+
+          if (filteredCheckIns.length > 0) {
+            const formattedNotifications = filteredCheckIns.map((log) => ({
+              id: log.id,
+              timestamp: log.timestamp,
+              message: log.message,
+              success: log.details?.success ?? true,
+              initials: log.details?.initials?.trim() || "?", // Use "?" if missing initials
+              customerName: log.details?.customerName?.trim() || "Unknown", // Use "Unknown" only if truly missing
+            }));
+
+            // Only update if a new check-in has appeared
+            setLastCheckInId((prevId) => {
+              if (prevId !== filteredCheckIns[0].id) {
+                setCheckInNotifications(formattedNotifications);
+                console.log("Updated Notifications:", formattedNotifications);
+                return filteredCheckIns[0].id;
+              }
+              return prevId;
+            });
+          }
+        }
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
     }
@@ -168,15 +232,33 @@ export default function AdminDashboard() {
 
     // Polling every 30 seconds
     const intervalId = setInterval(fetchData, 5000); // 30 seconds interval
-    console.log("Polling for new data every 1 second...");
     // Cleanup on component unmount
     return () => clearInterval(intervalId);
   }, []);
 
   if (!loaderData) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-black bg-gray-100">
-        <p>Loading...</p>
+      <div className="min-h-screen flex flex-col gap-5 items-center justify-center text-black bg-gray-100">
+        <Logo />
+        <div role="status">
+          <svg
+            aria-hidden="true"
+            className="inline w-8 h-8 text-gray-200 animate-spin dark:text-gray-600 fill-blue-600"
+            viewBox="0 0 100 101"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+              fill="currentColor"
+            />
+            <path
+              d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+              fill="currentFill"
+            />
+          </svg>
+          <span className="sr-only">Loading...</span>
+        </div>
       </div>
     );
   }
@@ -246,6 +328,9 @@ export default function AdminDashboard() {
             }
           />
         </div>
+
+        {/* last Notification */}
+        <CheckInNotifications notifications={checkInNotifications} />
 
         {/* Main Content */}
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

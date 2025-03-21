@@ -1,6 +1,6 @@
 import { prisma } from "~/utils/db.utils";
 import { getEnv } from "~/utils/env.server";
-import { verifyMembership } from "~/utils/square.server";
+import { initSquareClient, verifyMembership } from "~/utils/square.server";
 
 /**
  * Get a customer by ID
@@ -395,126 +395,48 @@ export async function getMemberMetrics(
   };
 }
 
-// async function fetchSquareCustomers() {
-//   const env = getEnv();
-//   const SQUARE_API_URL = "https://connect.squareup.com/v2/customers";
-//   try {
-//     const response = await fetch(SQUARE_API_URL, {
-//       method: "GET",
-//       headers: {
-//         Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
-//         Accept: "application/json",
-//         "Content-Type": "application/json",
-//       },
-//     });
+async function fetchSquareSubscription(customerId: string) {
+  const env = getEnv();
+  const SQUARE_API_URL = `https://connect.squareup.com/v2/subscriptions/search`;
 
-//     if (!response.ok) {
-//       throw new Error(
-//         `Failed to fetch Square customers: ${response.statusText}`
-//       );
-//     }
+  try {
+    const response = await fetch(SQUARE_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: {
+          filter: {
+            customer_ids: [customerId],
+          },
+        },
+      }),
+    });
 
-//     const data = await response.json();
-//     return data.customers || [];
-//   } catch (error) {
-//     console.error("Error fetching customers from Square:", error);
-//     return [];
-//   }
-// }
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch Square subscriptions: ${response.statusText}`
+      );
+    }
 
-// export async function syncCustomersWithPrisma() {
-//   const customers = await fetchSquareCustomers();
+    const data = await response.json();
+    const subscription = data.subscriptions?.find(
+      (sub: any) => sub.customer_id === customerId
+    );
 
-//   if (customers.length === 0) {
-//     console.log("No customers found in Square API.");
-//     return;
-//   }
-
-//   // Transform Square data to match Prisma schema
-//   const customerData =  customers.map((customer: any) => ({
-//     id: customer.id, // Use Square's customer ID
-//     name:
-//       `${customer.given_name || ""} ${customer.family_name || ""}`.trim() ||
-//       "Unknown",
-//     phoneNumber: customer.phone_number || null,
-//     membershipType: await updateMemberShip(customer.id),
-//   }));
-
-//   try {
-//     await prisma.customer.createMany({
-//       data: customerData,
-//       skipDuplicates: true, // Avoid inserting duplicate customers
-//     });
-
-//     console.log(`${customerData.length} customers synced with Prisma.`);
-//   } catch (error) {
-//     console.error("Error syncing customers with Prisma:", error);
-//   }
-// }
-
-// async function fetchSquareSubscription(customerId: string) {
-//   const env = getEnv();
-//   const SQUARE_API_URL = `https://connect.squareup.com/v2/customers/`;
-
-//   try {
-//     // make a post request with location id
-//     const response = await fetch(
-//       `${SQUARE_API_URL}${customerId}/subscriptions`,
-//       {
-//         method: "POST",
-//         headers: {
-//           Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
-//           Accept: "application/json",
-//           "Content-Type": "application/json",
-//         },
-//         body: JSON.stringify({
-//           query: {
-//             filter: {
-//               location_ids: [env.SQUARE_LOCATION_ID],
-//               customer_ids: [customerId],
-//             },
-//           },
-//         }),
-//       }
-//     );
-//     if (!response.ok) {
-//       throw new Error(
-//         `Failed to fetch Square subscription: ${response.statusText}`
-//       );
-//     }
-//     const data = await response.json();
-//     if (data.subscriptions.charged_through_date) {
-//       return {
-//         membershipType: "Subscription Based",
-//         expirationDate: data.subscriptions.charged_through_date,
-//       };
-//     }
-//   } catch (error) {
-//     console.error("Error fetching subscription from Square:", error);
-//     return {};
-//   }
-// }
-
-// export async function updateMemberShip(customerId: string) {
-//   const customer = await prisma.customer.findUnique({
-//     where: { id: customerId },
-//   });
-
-//   if (!customer) {
-//     throw new Error(`Customer with ID ${customerId} not found.`);
-//   }
-
-//   const customerSubscription = await fetchSquareSubscription(customerId);
-
-//   const updatedCustomer = await prisma.customer.update({
-//     where: { id: customerId },
-//     data: {
-//       membershipType: customerSubscription?.membershipType || "Unknown",
-//     },
-//   });
-
-//   return updatedCustomer;
-// }
+    return {
+      membershipType: subscription ? "Subscription Based" : "Unknown",
+      chargedThroughDate: subscription?.charged_through_date || null,
+      status: subscription?.status || "INACTIVE",
+    };
+  } catch (error) {
+    console.error("Error fetching subscription from Square:", error);
+    return { membershipType: "Unknown", status: "INACTIVE" };
+  }
+}
 
 async function fetchSquareCustomers() {
   const env = getEnv();
@@ -544,123 +466,319 @@ async function fetchSquareCustomers() {
 }
 
 export async function syncCustomersWithPrisma() {
-  const customers = await fetchSquareCustomers();
+  console.log("🔄 Syncing customers with Prisma...");
 
+  const customers = await fetchSquareCustomers();
   if (customers.length === 0) {
-    console.log("No customers found in Square API.");
+    console.log("⚠️ No customers found in Square API.");
     return;
   }
 
-  // Use Promise.all to handle async operations inside map
-  const customerData = await Promise.all(
-    customers.map(async (customer: any) => {
-      let membershipType = "Unknown";
-      let nextPayment = null;
-
-      // Check if customer is subscription-based
-      if (customer.membershipType?.includes("Subscription")) {
-        const subscriptionData = await updateMemberShip(customer.id);
-        membershipType = subscriptionData.membershipType;
-        nextPayment = subscriptionData.chargedThroughDate;
-      } else if (customer.phone_number) {
-        // For cash-based customers, verify membership using phone number
-        const verifiedData = await verifyMembership(customer.phone_number);
-        console.log(verifiedData);
-        // if (verifiedData) {
-        //   membershipType = verifiedData.membershipType;
-        //   nextPayment = verifiedData.expirationDate; // Use expiration date as next payment
-        // }
-      }
-
-      return {
-        id: customer.id, // Use Square's customer ID
-        name:
-          `${customer.given_name || ""} ${customer.family_name || ""}`.trim() ||
-          "Unknown",
-        phoneNumber: customer.phone_number || null,
-        membershipType, // Updated membership type
-        nextPayment, // Updated next payment
-      };
-    })
-  );
+  const client = initSquareClient();
+  let cashBasedCustomers: any[] = [];
 
   try {
-    await prisma.customer.createMany({
-      data: customerData,
-      skipDuplicates: true, // Avoid inserting duplicate customers
-    });
+    // 1️⃣ Fetch Subscription Status for Each Customer
+    const customerData = await Promise.all(
+      customers.map(async (customer) => {
+        try {
+          const subscriptionStatus = await fetchSquareSubscription(customer.id);
 
-    console.log(`${customerData.length} customers synced with Prisma.`);
-  } catch (error) {
-    console.error("Error syncing customers with Prisma:", error);
-  }
-}
+          if (!subscriptionStatus || !subscriptionStatus.membershipType) {
+            console.warn(
+              `⚠️ Missing subscription data for customer: ${customer.id}`
+            );
+            return null;
+          }
 
-async function fetchSquareSubscription(customerId: string) {
-  const env = getEnv();
-  const SQUARE_API_URL = `https://connect.squareup.com/v2/subscriptions/search`;
+          if (subscriptionStatus.membershipType === "Unknown") {
+            cashBasedCustomers.push(customer);
+          }
 
-  try {
-    // Make a GET request to fetch subscriptions
-    const response = await fetch(SQUARE_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: {
-          filter: {
-            location_ids: [env.SQUARE_LOCATION_ID],
-            customer_ids: [customerId],
-          },
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch Square subscriptions: ${response.statusText}`
-      );
-    }
-
-    const data = await response.json();
-
-    // Find the subscription for the specific customer
-    const subscription = data.subscriptions?.find(
-      (sub: any) => sub.customer_id === customerId
+          return {
+            id: customer.id,
+            name: `${customer.given_name || ""} ${customer.family_name || ""}`.trim(),
+            phoneNumber: customer.phone_number || null,
+            membershipType: subscriptionStatus.membershipType,
+            nextPayment: subscriptionStatus.chargedThroughDate || null,
+          };
+        } catch (error) {
+          console.error(`❌ Error processing customer ${customer.id}:`, error);
+          return null;
+        }
+      })
     );
 
-    return {
-      membershipType: subscription ? "Subscription Based" : "Unknown",
-      chargedThroughDate: subscription?.charged_through_date || null, // Return null if not available
-    };
+    // Remove any `null` values from failed operations
+    const validCustomerData = customerData.filter((data) => data !== null);
+
+    // 2️⃣ Fetch Cash Membership Status for Non-Subscription Customers
+    const cashBasedCustomersData = await Promise.all(
+      cashBasedCustomers.map(async (customer) => {
+        try {
+          const cashStatus = await checkCashMembershipStatus(customer.id);
+          return {
+            id: customer.id,
+            name: `${customer.given_name || ""} ${customer.family_name || ""}`.trim(),
+            phoneNumber: customer.phone_number || null,
+            membershipType: "Cash Payment Based",
+            nextPayment: cashStatus.expirationDate
+              ? new Date(cashStatus.expirationDate).toISOString().split("T")[0] // Extract YYYY-MM-DD
+              : null,
+          };
+        } catch (error) {
+          console.error(
+            `❌ Error processing cash customer ${customer.id}:`,
+            error
+          );
+          return null;
+        }
+      })
+    );
+
+    const allCustomers = [
+      ...validCustomerData,
+      ...cashBasedCustomersData,
+    ].filter((data) => data !== null);
+
+    // 3️⃣ Upsert Customers in Prisma
+    for (const customer of allCustomers) {
+      await prisma.customer.upsert({
+        where: { id: customer.id },
+        update: {
+          name: customer.name,
+          phoneNumber: customer.phoneNumber,
+          membershipType: customer.membershipType,
+          nextPayment: customer.nextPayment,
+        },
+        create: {
+          id: customer.id,
+          name: customer.name,
+          phoneNumber: customer.phoneNumber,
+          membershipType: customer.membershipType,
+          nextPayment: customer.nextPayment,
+        },
+      });
+    }
+
+    console.log(
+      `✅ Successfully synced ${allCustomers.length} customers with Prisma.`
+    );
   } catch (error) {
-    console.error("Error fetching subscription from Square:", error);
-    return { membershipType: "Unknown" };
+    console.error("❌ Error syncing customers with Prisma:", error);
   }
 }
 
-export async function updateMemberShip(customerId: string) {
-  const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
-  });
+// async function fetchSquareSubscription(customerId: string) {
+//   const env = getEnv();
+//   const SQUARE_API_URL = `https://connect.squareup.com/v2/subscriptions/search`;
 
-  if (!customer) {
-    throw new Error(`Customer with ID ${customerId} not found.`);
+//   try {
+//     // Make a GET request to fetch subscriptions
+//     const response = await fetch(SQUARE_API_URL, {
+//       method: "POST",
+//       headers: {
+//         Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+//         Accept: "application/json",
+//         "Content-Type": "application/json",
+//       },
+//       body: JSON.stringify({
+//         query: {
+//           filter: {
+//             location_ids: [env.SQUARE_LOCATION_ID],
+//             customer_ids: [customerId],
+//           },
+//         },
+//       }),
+//     });
+
+//     if (!response.ok) {
+//       throw new Error(
+//         `Failed to fetch Square subscriptions: ${response.statusText}`
+//       );
+//     }
+
+//     const data = await response.json();
+
+//     // Find the subscription for the specific customer
+//     const subscription = data.subscriptions?.find(
+//       (sub: any) => sub.customer_id === customerId
+//     );
+
+//     return {
+//       membershipType: subscription ? "Subscription Based" : "Unknown",
+//       chargedThroughDate: subscription?.charged_through_date || null, // Return null if not available
+//     };
+//   } catch (error) {
+//     console.error("Error fetching subscription from Square:", error);
+//     return { membershipType: "Unknown" };
+//   }
+// }
+
+function checkSubscriptionStatus(subscription) {
+  // If there is no subscription data or its status is missing, return default inactive values
+  if (!subscription || !subscription.status) {
+    return {
+      membershipStatus: "Inactive",
+      expirationDate: "No Active Subscription", // No subscription found
+      paymentStatus: "No Subscription Found", // No active payment
+      nextPayment: "N/A", // No scheduled payment
+    };
   }
 
-  const { membershipType, chargedThroughDate } =
-    await fetchSquareSubscription(customerId);
+  // Get today's date
+  const today = new Date();
+  // Convert the charged_through_date from Square API to a JavaScript Date object
+  const chargedThroughDate = new Date(subscription.charged_through_date);
+  // Calculate the next payment date (assumed to be the day after charged_through_date)
+  const nextPaymentDate = new Date(chargedThroughDate);
+  nextPaymentDate.setDate(chargedThroughDate.getDate() + 1);
 
-  await prisma.customer.update({
-    where: { id: customerId },
-    data: {
-      membershipType,
-      nextPayment: chargedThroughDate, // Ensure this exists in your Prisma schema
-    },
-  });
+  // Default payment status if the subscription status is unknown
+  let paymentStatus = "Unknown";
 
-  return { membershipType, chargedThroughDate }; // Return both values
+  // If the subscription is active, check if the user is still within the paid period
+  if (subscription.status === "ACTIVE") {
+    paymentStatus = chargedThroughDate >= today ? "Paid" : "Past Due";
+  }
+  // If the subscription has been canceled, update the payment status accordingly
+  else if (subscription.status === "CANCELED") {
+    paymentStatus = "Canceled";
+  }
+
+  return {
+    // Membership is active only if subscription status is "ACTIVE"
+    membershipStatus: subscription.status === "ACTIVE" ? "Active" : "Inactive",
+    // Expiration date is set to the charged_through_date
+    // expirationDate: chargedThroughDate.toISOString(),
+    // Payment status based on the subscription's current state
+    paymentStatus: paymentStatus,
+    // If the subscription is active, show the next payment date; otherwise, mark it as "N/A"
+    nextPayment:
+      subscription.status === "ACTIVE" ? nextPaymentDate.toISOString() : "N/A",
+  };
+}
+
+async function checkCashMembershipStatus(customerId) {
+  const today = new Date();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const formattedDate = thirtyDaysAgo.toISOString();
+
+  const env = getEnv();
+  const client = initSquareClient();
+  const accessToken = env.SQUARE_ACCESS_TOKEN;
+
+  try {
+    const response = await client.paymentsApi.listPayments(
+      formattedDate, // beginTime
+      undefined, // endTime
+      undefined, // sortOrder
+      undefined, // cursor
+      undefined, // locationId
+      undefined, // total
+      undefined, // last4
+      undefined, // cardBrand
+      undefined, // limit
+      {
+        customerId: customerId,
+      }
+    );
+
+    const data = response.result;
+    // console.log("Payments API Response:", data.payments);
+
+    if (!data.payments || data.payments.length === 0) {
+      return {
+        membershipStatus: "Inactive",
+        expirationDate: "No Recent Payment",
+        paymentStatus: "No Payment Found",
+      };
+    }
+
+    // // Filter payments based on amount and validity
+    // Filter payments based on amount and validity
+    const validPayments = data.payments.filter((payment) => {
+      // Ensure amountMoney exists before accessing its properties
+      if (
+        !payment.amountMoney ||
+        typeof payment.amountMoney.amount === "undefined"
+      ) {
+        console.warn("Skipping payment due to missing amountMoney:", payment);
+        return false;
+      }
+
+      // Convert BigInt to Number safely
+      const amountPaid = Number(payment.amountMoney.amount) / 100; // Convert cents to dollars
+
+      // Ensure transaction is in the expected currency (e.g., USD)
+      // Remove currency check if GBP payments are valid
+      if (!["USD", "GBP"].includes(payment.amountMoney.currency)) {
+        console.warn(
+          "Skipping payment due to unsupported currency:",
+          payment.amountMoney.currency
+        );
+        return false;
+      }
+
+      // Parse payment date
+      const paymentDate = new Date(payment.createdAt);
+
+      return (
+        paymentDate >= thirtyDaysAgo &&
+        paymentDate <= today &&
+        amountPaid >= 25 &&
+        amountPaid <= 31 &&
+        payment.status !== "CANCELED" &&
+        (!payment.refundIds || payment.refundIds.length === 0) && // Ensure not refunded
+        !payment.refundedMoney // Ensure no refund amount
+      );
+    });
+
+    if (validPayments.length === 0) {
+      return {
+        membershipStatus: "Inactive",
+        expirationDate: "No Valid Payment Found",
+        paymentStatus: "No Valid Payment",
+      };
+    }
+
+    // Sort payments by creation date (latest first)
+    validPayments.sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    );
+
+    // Get latest payment
+    const latestPayment = validPayments[0];
+    const latestPaymentDate = new Date(latestPayment.createdAt);
+    console.log("Latest Payment Date:", latestPaymentDate);
+    if (isNaN(latestPaymentDate.getTime())) {
+      console.error("Invalid latestPaymentDate:", latestPayment.created_at);
+      return {
+        membershipStatus: "Error",
+        expirationDate: "Invalid Payment Date",
+        paymentStatus: "Error Parsing Date",
+      };
+    }
+
+    // Calculate expiration date (30 days after last payment)
+    let expirationDate = new Date(latestPaymentDate);
+    expirationDate.setUTCDate(latestPaymentDate.getUTCDate() + 30);
+
+    // Check if membership is active
+    const isActive = expirationDate >= today;
+    return {
+      membershipStatus: isActive ? "Active" : "Inactive",
+      expirationDate: expirationDate.toISOString(),
+      paymentStatus: isActive ? "Paid" : "Expired",
+    };
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    return {
+      membershipStatus: "Error",
+      expirationDate: "N/A",
+      paymentStatus: "Error Fetching Payments",
+      error: error.message,
+    };
+  }
 }
