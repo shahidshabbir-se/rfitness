@@ -158,68 +158,27 @@ export default function AdminDashboard() {
       setMemberMetrics(data.memberMetrics);
       setLastRefresh(new Date().toISOString());
       if (data.recentActivity?.recentLogs?.length) {
-        // Filter check-in logs
-        const checkInLogs = data.recentActivity.recentLogs
-          .filter((log: any) => log.type === "check_in")
-          .sort((a: any, b: any) => parseInt(b.id) - parseInt(a.id)); // Sort by latest first
+        // Sort by latest first and keep only the latest 5 logs
+        const latestLogs = data.recentActivity.recentLogs
+          .sort((a: any, b: any) => parseInt(b.id) - parseInt(a.id))
+          .slice(0, 5)
+          .map((log) => ({
+            id: log.id,
+            timestamp: log.timestamp,
+            message: log.message,
+            success: log.details?.success ?? true, // Default to true if missing
+            initials: log.customerName
+              ? log.customerName
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .toUpperCase()
+              : "?", // Default to "?" if initials are missing
+            customerName: log.customerName?.trim() || "Unknown", // Default to "Unknown"
+          }));
 
-        // Remove duplicates: Prefer logs that contain full `details`
-        const uniqueCheckIns = new Map();
-
-        checkInLogs.forEach((log) => {
-          const key = log.id; // Unique key is `id`
-          if (!uniqueCheckIns.has(key) || log.details?.customerName) {
-            uniqueCheckIns.set(key, log); // Store only logs with details
-          }
-        });
-
-        const filteredCheckIns = Array.from(uniqueCheckIns.values()).slice(
-          0,
-          5
-        ); // Keep latest 5 check-ins
-
-        if (data.recentActivity?.recentLogs?.length) {
-          // Filter check-in logs
-          const checkInLogs = data.recentActivity.recentLogs
-            .filter((log: any) => log.type === "check_in")
-            .sort((a: any, b: any) => parseInt(b.id) - parseInt(a.id)); // Sort by latest first
-
-          // Store only unique check-ins by customerId, prioritizing those with full details
-          const uniqueCheckIns = new Map();
-
-          checkInLogs.forEach((log) => {
-            const key = log.details?.customerId || log.id; // Prefer customerId if available
-            if (!uniqueCheckIns.has(key) || log.details?.customerName) {
-              uniqueCheckIns.set(key, log); // Store log only if it has full details
-            }
-          });
-
-          const filteredCheckIns = Array.from(uniqueCheckIns.values()).slice(
-            0,
-            5
-          ); // Keep latest 5 unique check-ins
-
-          if (filteredCheckIns.length > 0) {
-            const formattedNotifications = filteredCheckIns.map((log) => ({
-              id: log.id,
-              timestamp: log.timestamp,
-              message: log.message,
-              success: log.details?.success ?? true,
-              initials: log.details?.initials?.trim() || "?", // Use "?" if missing initials
-              customerName: log.details?.customerName?.trim() || "Unknown", // Use "Unknown" only if truly missing
-            }));
-
-            // Only update if a new check-in has appeared
-            setLastCheckInId((prevId) => {
-              if (prevId !== filteredCheckIns[0].id) {
-                setCheckInNotifications(formattedNotifications);
-                console.log("Updated Notifications:", formattedNotifications);
-                return filteredCheckIns[0].id;
-              }
-              return prevId;
-            });
-          }
-        }
+        setCheckInNotifications(latestLogs);
+        console.log("Updated Notifications:", latestLogs);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
