@@ -1,25 +1,51 @@
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rfitness_app
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://admin:admin123@postgres:5432/postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./public:/app/public
+      - ./prisma:/app/prisma
+    networks:
+      - postgres_network
+
   postgres:
     image: postgres:latest
     container_name: postgres_db
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
-      POSTGRES_DB: postgres
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin123
+      - POSTGRES_DB=postgres
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - postgres_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     image: dpage/pgadmin4
     container_name: pgadmin
-    restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@rfitness.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin123
     ports:
       - "5050:80"
     depends_on:
@@ -32,3 +58,4 @@ volumes:
 
 networks:
   postgres_network:
+    name: rfitness_postgres_network

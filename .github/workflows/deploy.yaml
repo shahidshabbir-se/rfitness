@@ -39,16 +39,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: create env file
+      - name: Set up SSH key and known hosts
         run: |
-          echo "GIT_COMMIT_HASH=${{ github.sha }}" >> ./envfile
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Deploy with Docker Stack
+      - name: Deploy Docker Stack (Without App)
         uses: cssnr/stack-deploy-action@v1
         with:
           name: rfitness
-          file: docker-stack.yml
+          file: docker-stack.yaml
           host: ${{ secrets.SERVER_IP }}
           user: ${{ secrets.SERVER_USER }}
           ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          env_file: ./envfile
+
+      - name: Start SSH Tunnel for Database
+        run: |
+          echo "Starting SSH tunnel..."
+          ssh -o IdentitiesOnly=yes -i ~/.ssh/deploy_key -N -L 5432:localhost:5432 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} &
+          SSH_TUNNEL_PID=$!
+
+          echo "Waiting for tunnel to be ready..."
+          sleep 5
+
+          echo "Running Prisma migrations..."
+          export DATABASE_URL="postgresql://postgres:${{ secrets.DB_PASSWORD }}@localhost:5432/app"
+          npx prisma migrate deploy
+
+          echo "Closing SSH tunnel..."
+          kill $SSH_TUNNEL_PID
+
+      - name: Start Application After Migrations
+        run: |
+          echo "Starting app service..."
+          ssh -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "docker service scale rfitness_app=1"

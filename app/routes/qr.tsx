@@ -1,6 +1,5 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { Link } from "@remix-run/react";
-import { useEffect, useRef } from "react";
 import { requireAdmin } from "~/utils/session.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -10,73 +9,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function QRCode() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const qrImageRef = useRef<HTMLImageElement>(null);
-  
-  useEffect(() => {
-    // This would be replaced with a real QR code generation library in production
-    // For now, we'll just simulate a QR code with a placeholder image
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Draw a placeholder QR code
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, 300, 300);
-        
-        ctx.fillStyle = 'black';
-        // Draw border
-        ctx.fillRect(0, 0, 300, 30);
-        ctx.fillRect(0, 0, 30, 300);
-        ctx.fillRect(270, 0, 30, 300);
-        ctx.fillRect(0, 270, 300, 30);
-        
-        // Draw position detection patterns
-        ctx.fillRect(50, 50, 80, 80);
-        ctx.fillRect(170, 50, 80, 80);
-        ctx.fillRect(50, 170, 80, 80);
-        
-        // Draw white squares inside position detection patterns
-        ctx.fillStyle = 'white';
-        ctx.fillRect(65, 65, 50, 50);
-        ctx.fillRect(185, 65, 50, 50);
-        ctx.fillRect(65, 185, 50, 50);
-        
-        // Draw black squares inside white squares
-        ctx.fillStyle = 'black';
-        ctx.fillRect(80, 80, 20, 20);
-        ctx.fillRect(200, 80, 20, 20);
-        ctx.fillRect(80, 200, 20, 20);
-        
-        // Draw some random modules to make it look like a QR code
-        for (let i = 0; i < 100; i++) {
-          const x = Math.floor(Math.random() * 240) + 30;
-          const y = Math.floor(Math.random() * 240) + 30;
-          const size = Math.floor(Math.random() * 10) + 5;
-          ctx.fillRect(x, y, size, size);
-        }
-        
-        // Add text to indicate this is for check-in
-        ctx.font = '14px Arial';
-        ctx.fillStyle = 'black';
-        ctx.fillText('Scan to check in', 100, 150);
-        
-        // Update the image reference for download
-        if (qrImageRef.current) {
-          qrImageRef.current.src = canvas.toDataURL('image/png');
-        }
-      }
-    }
-  }, []);
-  
   const handleDownload = () => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const link = document.createElement('a');
-      link.download = 'gym-checkin-qr.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    }
+    // Create a link element and trigger download of the static QR code
+    const link = document.createElement('a');
+    link.download = 'gym-checkin-qr.png';
+    link.href = `/gym-checkin-qr.png?t=${Date.now()}`; // Add cache-busting parameter
+    link.click();
   };
   
   return (
@@ -88,17 +26,13 @@ export default function QRCode() {
         </div>
         
         <div className="flex flex-col items-center">
-          <canvas 
-            ref={canvasRef} 
+          {/* Display the static QR code image */}
+          <img 
+            src={`/gym-checkin-qr.png?t=${Date.now()}`} // Add cache-busting parameter
+            alt="Check-in QR Code" 
             width={300} 
             height={300} 
             className="mb-4 rounded-lg border border-gray-200 shadow-sm"
-          />
-          
-          <img 
-            ref={qrImageRef} 
-            alt="QR Code" 
-            className="hidden" // Hidden, just used for download
           />
           
           <button

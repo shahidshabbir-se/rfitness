@@ -1,0 +1,112 @@
+services:
+  traefik:
+    image: traefik:v3.3
+    container_name: traefik
+    restart: always
+    command:
+      - "--api.dashboard=false"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=michael@rfitness.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpChallenge.entryPoint=web"
+    ports:
+      - mode: host
+        protocol: tcp
+        published: 80
+        target: 80
+      - mode: host
+        protocol: tcp
+        published: 443
+        target: 443
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt"
+
+  app:
+    image: ghcr.io/shahidshabbir-se/rfitness:${GIT_COMMIT_HASH:-latest}
+    secrets:
+      - db-password
+      - db-url
+      - square-access-token
+      - square-location-id
+      - square-webhook-signature-key
+      - session-secret
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=app
+      - POSTGRES_PORT=5432
+      - POSTGRES_SSLMODE=disable
+      - SESSION_SECRET_FILE=/run/secrets/session-secret
+      - SQUARE_ENVIRONMENT=production
+      - SQUARE_ACCESS_TOKEN_FILE=/run/secrets/square-access-token
+      - SQUARE_LOCATION_ID_FILE=/run/secrets/square-location-id
+      - SQUARE_WEBHOOK_SIGNATURE_KEY_FILE=/run/secrets/square-webhook-signature-key
+      - SQUARE_WEBHOOK_URL=https://checkin.rfitnessbelfast.com/api/webhook
+      - DATABASE_URL_FILE=/run/secrets/db-url
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`checkin.rfitnessbelfast.com`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls.certresolver=letsencrypt"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+    depends_on:
+      - db
+    entrypoint: [
+        "/bin/sh",
+        "-c",
+        "export POSTGRES_PASSWORD=$$(cat /run/secrets/db-password) && \
+        export DATABASE_URL=$$(cat /run/secrets/db-url) && \
+        export SQUARE_ACCESS_TOKEN=$$(cat /run/secrets/square-access-token) && \
+        export SQUARE_LOCATION_ID=$$(cat /run/secrets/square-location-id) && \
+        export SQUARE_WEBHOOK_SIGNATURE_KEY=$$(cat /run/secrets/square-webhook-signature-key) && \
+        npx prisma generate && \
+        npx --no-install remix-serve build/server/index.js",
+      ]
+
+  db:
+    image: postgres
+    container_name: postgres-db
+    user: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    secrets:
+      - db-password
+    ports:
+      - mode: host
+        protocol: tcp
+        published: 5432
+        target: 5432
+    environment:
+      - POSTGRES_DB=app
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:
+  letsencrypt:
+
+secrets:
+  db-password:
+    external: true
+  db-url:
+    external: true
+  square-access-token:
+    external: true
+  square-location-id:
+    external: true
+  square-webhook-signature-key:
+    external: true
+  session-secret:
+    external: true
