@@ -595,9 +595,12 @@ async function getLatestPaymentForCustomer(
     return null;
   }
   try {
-    let cursor = undefined;
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const formattedDate = thirtyDaysAgo.toISOString();
     const response = await client.paymentsApi.listPayments(
-      undefined, // start time
+      formattedDate, // start time
       undefined, // end time
       "DESC", // sortOrder: DESC for latest payments first
       cursor || undefined, // cursor
