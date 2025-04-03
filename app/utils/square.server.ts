@@ -473,10 +473,8 @@ export async function getMembersNeedingRenewal(): Promise<{
         }
       } catch (error) {
         console.error(
-          `Error checking renewal status for customer ${customer.id}:`,
-          error
+          `Error checking renewal status for customer ${customer.id}`
         );
-        // Continue with next customer
       }
     }
 

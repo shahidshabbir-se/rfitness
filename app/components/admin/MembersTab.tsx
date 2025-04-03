@@ -88,31 +88,28 @@ export default function MembersTab({ members, onRefresh }: MembersTabProps) {
           {/* Filter Buttons */}
           <div className="flex space-x-2">
             <button
-              className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                filter === "all"
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${filter === "all"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+                }`}
               onClick={() => setFilter("all")}
             >
               All
             </button>
             <button
-              className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                filter === "active"
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${filter === "active"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+                }`}
               onClick={() => setFilter("active")}
             >
               Active
             </button>
             <button
-              className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                filter === "inactive"
+              className={`rounded-lg px-4 py-2 text-sm font-medium ${filter === "inactive"
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+                }`}
               onClick={() => setFilter("inactive")}
             >
               Inactive
@@ -183,11 +180,10 @@ export default function MembersTab({ members, onRefresh }: MembersTabProps) {
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
                     <span
-                      className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                        member.status === "Active"
+                      className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${member.status === "Active"
                           ? "bg-green-100 text-green-800"
                           : "bg-red-100 text-red-800"
-                      }`}
+                        }`}
                     >
                       {member.status}
                     </span>
@@ -223,11 +219,10 @@ export default function MembersTab({ members, onRefresh }: MembersTabProps) {
             <button
               onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
               disabled={currentPage === 1}
-              className={`relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium ${
-                currentPage === 1
+              className={`relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium ${currentPage === 1
                   ? "text-gray-300"
                   : "text-gray-700 hover:bg-gray-50"
-              }`}
+                }`}
             >
               Previous
             </button>
@@ -236,11 +231,10 @@ export default function MembersTab({ members, onRefresh }: MembersTabProps) {
                 handlePageChange(Math.min(totalPages, currentPage + 1))
               }
               disabled={currentPage === totalPages}
-              className={`relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium ${
-                currentPage === totalPages
+              className={`relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium ${currentPage === totalPages
                   ? "text-gray-300"
                   : "text-gray-700 hover:bg-gray-50"
-              }`}
+                }`}
             >
               Next
             </button>
@@ -265,11 +259,10 @@ export default function MembersTab({ members, onRefresh }: MembersTabProps) {
                 <button
                   onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
                   disabled={currentPage === 1}
-                  className={`relative inline-flex items-center rounded-l-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium ${
-                    currentPage === 1
+                  className={`relative inline-flex items-center rounded-l-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium ${currentPage === 1
                       ? "text-gray-300"
                       : "text-gray-500 hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
                   <span className="sr-only">Previous</span>
                   <svg
@@ -305,11 +298,10 @@ export default function MembersTab({ members, onRefresh }: MembersTabProps) {
                     <button
                       key={pageNum}
                       onClick={() => handlePageChange(pageNum)}
-                      className={`relative inline-flex items-center border px-4 py-2 text-sm font-medium ${
-                        currentPage === pageNum
+                      className={`relative inline-flex items-center border px-4 py-2 text-sm font-medium ${currentPage === pageNum
                           ? "z-10 border-blue-500 bg-blue-50 text-blue-600"
                           : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50"
-                      }`}
+                        }`}
                     >
                       {pageNum}
                     </button>
@@ -321,11 +313,10 @@ export default function MembersTab({ members, onRefresh }: MembersTabProps) {
                     handlePageChange(Math.min(totalPages, currentPage + 1))
                   }
                   disabled={currentPage === totalPages}
-                  className={`relative inline-flex items-center rounded-r-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium ${
-                    currentPage === totalPages
+                  className={`relative inline-flex items-center rounded-r-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium ${currentPage === totalPages
                       ? "text-gray-300"
                       : "text-gray-500 hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
                   <span className="sr-only">Next</span>
                   <svg

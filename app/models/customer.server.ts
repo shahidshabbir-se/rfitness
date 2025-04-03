@@ -1,6 +1,7 @@
 import { prisma } from "~/utils/db.utils";
 import { getEnv } from "~/utils/env.server";
 import { initSquareClient, verifyMembership } from "~/utils/square.server";
+import { Customer, SortedCustomers, Subscription, Payment } from "~/types/customers";
 
 /**
  * Get a customer by ID
@@ -466,108 +467,170 @@ async function fetchSquareCustomers() {
 }
 
 export async function syncCustomersWithPrisma() {
-  console.log("🔄 Syncing customers with Prisma...");
-
-  const customers = await fetchSquareCustomers();
-  if (customers.length === 0) {
+  const client = initSquareClient();
+  let sortedCustomers: SortedCustomers[] = [];
+  const getCustomersIds = async () => {
+    try {
+      const response = await client.customersApi.listCustomers();
+      const customers: Customer[] = response.result.customers || [];
+      for (const customer of customers) {
+        await prisma.customer.upsert({
+          where: { id: customer.id },
+          update: {
+            name: `${customer.givenName} ${customer.familyName}`,
+            phoneNumber: customer.phoneNumber,
+          },
+          create: {
+            id: customer.id,
+            name: `${customer.givenName} ${customer.familyName}`,
+            phoneNumber: customer.phoneNumber,
+          },
+        });
+        //await upsertCustomer({
+        //  id: customer.id,
+        //  name: `${customer.givenName} ${customer.familyName}`,
+        //  phoneNumber: customer.phoneNumber,
+        //});
+      }
+      const customerIds: string[] = customers.map((customer: Customer) => customer.id);
+      return customerIds;
+    } catch (error) {
+      console.error("Error fetching customer IDs");
+    }
+  }
+  const customerIds = await getCustomersIds();
+  if (customerIds && customerIds.length === 0) {
     console.log("⚠️ No customers found in Square API.");
     return;
   }
 
-  const client = initSquareClient();
-  let cashBasedCustomers: any[] = [];
-
-  try {
-    // 1️⃣ Fetch Subscription Status for Each Customer
-    const customerData = await Promise.all(
-      customers.map(async (customer) => {
-        try {
-          const subscriptionStatus = await fetchSquareSubscription(customer.id);
-
-          if (!subscriptionStatus || !subscriptionStatus.membershipType) {
-            console.warn(
-              `⚠️ Missing subscription data for customer: ${customer.id}`
-            );
-            return null;
+  const subscriptionMembersStatus = async (customerIds: string[]): Promise<{
+    subscriptionBased: SortedCustomers[];
+    cashBased: string[];
+  }> => {
+    try {
+      const response = await client.subscriptionsApi.searchSubscriptions({
+        query: {
+          filter: {
+            customerIds: customerIds
           }
-
-          if (subscriptionStatus.membershipType === "Unknown") {
-            cashBasedCustomers.push(customer);
-          }
-
-          return {
-            id: customer.id,
-            name: `${customer.given_name || ""} ${customer.family_name || ""}`.trim(),
-            phoneNumber: customer.phone_number || null,
-            membershipType: subscriptionStatus.membershipType,
-            nextPayment: subscriptionStatus.chargedThroughDate || null,
-          };
-        } catch (error) {
-          console.error(`❌ Error processing customer ${customer.id}:`, error);
-          return null;
         }
-      })
-    );
+      });
 
-    // Remove any `null` values from failed operations
-    const validCustomerData = customerData.filter((data) => data !== null);
+      const subscriptionBasedCustomerData: SortedCustomers[] = response.result.subscriptions
+        .filter((sub: Subscription) => sub.chargedThroughDate && (sub.status === 'ACTIVE' || sub.status === 'PENDING'))
+        .map((sub: Subscription) => ({
+          customerId: sub.customerId,
+          nextPaymentDate: sub.chargedThroughDate,
+          membershipStatus: "Subscription Based"
+        }));
 
-    // 2️⃣ Fetch Cash Membership Status for Non-Subscription Customers
-    const cashBasedCustomersData = await Promise.all(
-      cashBasedCustomers.map(async (customer) => {
-        try {
-          const cashStatus = await checkCashMembershipStatus(customer.id);
-          return {
-            id: customer.id,
-            name: `${customer.given_name || ""} ${customer.family_name || ""}`.trim(),
-            phoneNumber: customer.phone_number || null,
-            membershipType: "Cash Payment Based",
-            nextPayment: cashStatus.expirationDate
-              ? new Date(cashStatus.expirationDate).toISOString().split("T")[0] // Extract YYYY-MM-DD
-              : null,
-          };
-        } catch (error) {
-          console.error(
-            `❌ Error processing cash customer ${customer.id}:`,
-            error
-          );
-          return null;
-        }
-      })
-    );
+      const subscriptionBasedCustomerIds: string[] = subscriptionBasedCustomerData.map(data => data.customerId);
+      const cashBasedCustomerIds = customerIds.filter(id => !subscriptionBasedCustomerIds.includes(id));
 
-    const allCustomers = [
-      ...validCustomerData,
-      ...cashBasedCustomersData,
-    ].filter((data) => data !== null);
+      return {
+        subscriptionBased: subscriptionBasedCustomerData,
+        cashBased: cashBasedCustomerIds
+      };
+    } catch (error) {
+      console.log("Unexpected error occurred: ", error);
+      return { subscriptionBased: [], cashBased: [] };
+    }
+  };
+  const { subscriptionBased, cashBased } = await subscriptionMembersStatus(customerIds);
+  sortedCustomers = subscriptionBased;
+  // everything is above setuped right
+  // now we need to check for cash based customers
+  // and update their status
+  for (const customerId of cashBased) {
+    const status: SortedCustomers | null = await getLatestPaymentForCustomer(client, customerId);
 
-    // 3️⃣ Upsert Customers in Prisma
-    for (const customer of allCustomers) {
-      await prisma.customer.upsert({
-        where: { id: customer.id },
-        update: {
-          name: customer.name,
-          phoneNumber: customer.phoneNumber,
-          membershipType: customer.membershipType,
-          nextPayment: customer.nextPayment,
-        },
-        create: {
-          id: customer.id,
-          name: customer.name,
-          phoneNumber: customer.phoneNumber,
-          membershipType: customer.membershipType,
-          nextPayment: customer.nextPayment,
-        },
+    if (status && status.membershipStatus === "ACTIVE") {
+      sortedCustomers.push({
+        customerId,
+        nextPaymentDate: status.nextPaymentDate,
+        membershipStatus: "Cash Based",
       });
     }
-
-    console.log(
-      `✅ Successfully synced ${allCustomers.length} customers with Prisma.`
-    );
-  } catch (error) {
-    console.error("❌ Error syncing customers with Prisma:", error);
+  }
+  for (const customer of sortedCustomers) {
+    await prisma.customer.update({
+      where: { id: customer.customerId },
+      data: {
+        membershipType: customer.membershipStatus,
+        nextPayment: customer.nextPaymentDate,
+      },
+    });
   }
 }
+
+async function getLatestPaymentForCustomer(client: any, customerId: string): Promise<SortedCustomers | null> {
+  if (!customerId) {
+    console.error("Error: customerId is required.");
+    return null;
+  }
+
+  try {
+    const response = await client.paymentsApi.listPayments(
+      undefined, // start time
+      undefined, // end time
+      'DESC', // sortOrder: DESC for latest payments first
+      undefined, // cursor
+      undefined, // locationId
+      undefined, // total
+      undefined, // last4
+      undefined, // cardBrand
+      100 // limit increased to get more payments
+    );
+
+    if (!response.result || !response.result.payments) {
+      console.error("Error: Invalid response from API.");
+      return null;
+    }
+
+    // Filter payments based on customerId and amount between 25 and 31 (assuming amount is in cents)
+    const customerPayments = response.result.payments.filter(
+      (payment: Payment) =>
+        payment.customerId === customerId &&
+        payment.amountMoney?.amount !== undefined &&
+        payment.amountMoney?.amount >= 2500n &&  // Use `bigint` for comparison
+        payment.amountMoney?.amount <= 3100n    // Use `bigint` for comparison
+    );
+    let notfoundPaymentCustomerIds = []
+    if (customerPayments.length === 0) {
+      notfoundPaymentCustomerIds.push(customerId);
+      console.log("Not Found Payment Customer Ids: ", notfoundPaymentCustomerIds);
+      return null;
+    }
+
+    // Get the latest payment (first item is the latest due to 'DESC' order)
+    const latestPayment = customerPayments[0];
+
+    // Check for the createdAt timestamp and convert it to a next payment date
+    if (!latestPayment.createdAt || isNaN(new Date(latestPayment.createdAt).getTime())) {
+      console.error("Error: Invalid or missing createdAt timestamp for latest payment.");
+      return null;
+    }
+
+    // Use this payment's date as the next payment date (adding 1 month)
+    const nextPaymentDate = new Date(latestPayment.createdAt);
+    nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+
+
+    // Return the sorted customer object
+    const data: SortedCustomers = {
+      customerId: latestPayment.customerId,
+      nextPaymentDate: nextPaymentDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+      membershipStatus: 'ACTIVE',
+    };
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    return null;
+  }
+}
+
 
 // async function fetchSquareSubscription(customerId: string) {
 //   const env = getEnv();

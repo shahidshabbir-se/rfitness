@@ -125,10 +125,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
         nextPayment: "",
         initials: log.details?.customerName
           ? log.details.customerName
-              .split(" ")
-              .map((n: string) => n[0])
-              .join("")
-              .substring(0, 2)
+            .split(" ")
+            .map((n: string) => n[0])
+            .join("")
+            .substring(0, 2)
           : "CU",
         eventType: "customer-update",
       }));
@@ -273,9 +273,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
         // Check conditions
         const status =
           (customer.membershipType === "Subscription Based" ||
-            customer.membershipType === "Cash Payment Based") &&
-          nextPaymentDate &&
-          nextPaymentDate >= today
+            customer.membershipType === "Cash Based") &&
+            nextPaymentDate &&
+            nextPaymentDate >= today
             ? "Active"
             : "";
 
@@ -324,9 +324,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       // Use real membership type data
       membershipTypes: customerStats.membershipTypes
         ? customerStats.membershipTypes.map((type: any) => ({
-            type: type.type || "Unknown",
-            count: type.count || 0,
-          }))
+          type: type.type || "Unknown",
+          count: type.count || 0,
+        }))
         : [],
     };
 
