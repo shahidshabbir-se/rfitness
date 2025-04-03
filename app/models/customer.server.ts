@@ -1,7 +1,12 @@
 import { prisma } from "~/utils/db.utils";
 import { getEnv } from "~/utils/env.server";
 import { initSquareClient, verifyMembership } from "~/utils/square.server";
-import { Customer, SortedCustomers, Subscription, Payment } from "~/types/customers";
+import {
+  Customer,
+  SortedCustomers,
+  Subscription,
+  Payment,
+} from "~/types/customers";
 
 /**
  * Get a customer by ID
@@ -466,6 +471,7 @@ async function fetchSquareCustomers() {
   }
 }
 
+let cursor: any = undefined;
 export async function syncCustomersWithPrisma() {
   const client = initSquareClient();
   let sortedCustomers: SortedCustomers[] = [];
@@ -492,19 +498,23 @@ export async function syncCustomersWithPrisma() {
         //  phoneNumber: customer.phoneNumber,
         //});
       }
-      const customerIds: string[] = customers.map((customer: Customer) => customer.id);
+      const customerIds: string[] = customers.map(
+        (customer: Customer) => customer.id
+      );
       return customerIds;
     } catch (error) {
       console.error("Error fetching customer IDs");
     }
-  }
+  };
   const customerIds = await getCustomersIds();
   if (customerIds && customerIds.length === 0) {
     console.log("⚠️ No customers found in Square API.");
     return;
   }
 
-  const subscriptionMembersStatus = async (customerIds: string[]): Promise<{
+  const subscriptionMembersStatus = async (
+    customerIds: string[]
+  ): Promise<{
     subscriptionBased: SortedCustomers[];
     cashBased: string[];
   }> => {
@@ -512,38 +522,50 @@ export async function syncCustomersWithPrisma() {
       const response = await client.subscriptionsApi.searchSubscriptions({
         query: {
           filter: {
-            customerIds: customerIds
-          }
-        }
+            customerIds: customerIds,
+          },
+        },
       });
 
-      const subscriptionBasedCustomerData: SortedCustomers[] = response.result.subscriptions
-        .filter((sub: Subscription) => sub.chargedThroughDate && (sub.status === 'ACTIVE' || sub.status === 'PENDING'))
-        .map((sub: Subscription) => ({
-          customerId: sub.customerId,
-          nextPaymentDate: sub.chargedThroughDate,
-          membershipStatus: "Subscription Based"
-        }));
+      const subscriptionBasedCustomerData: SortedCustomers[] =
+        response.result.subscriptions
+          .filter(
+            (sub: Subscription) =>
+              sub.chargedThroughDate &&
+              (sub.status === "ACTIVE" || sub.status === "PENDING")
+          )
+          .map((sub: Subscription) => ({
+            customerId: sub.customerId,
+            nextPaymentDate: sub.chargedThroughDate,
+            membershipStatus: "Subscription Based",
+          }));
 
-      const subscriptionBasedCustomerIds: string[] = subscriptionBasedCustomerData.map(data => data.customerId);
-      const cashBasedCustomerIds = customerIds.filter(id => !subscriptionBasedCustomerIds.includes(id));
+      const subscriptionBasedCustomerIds: string[] =
+        subscriptionBasedCustomerData.map((data) => data.customerId);
+      const cashBasedCustomerIds = customerIds.filter(
+        (id) => !subscriptionBasedCustomerIds.includes(id)
+      );
 
       return {
         subscriptionBased: subscriptionBasedCustomerData,
-        cashBased: cashBasedCustomerIds
+        cashBased: cashBasedCustomerIds,
       };
     } catch (error) {
       console.log("Unexpected error occurred: ", error);
       return { subscriptionBased: [], cashBased: [] };
     }
   };
-  const { subscriptionBased, cashBased } = await subscriptionMembersStatus(customerIds);
+  const { subscriptionBased, cashBased } =
+    await subscriptionMembersStatus(customerIds);
   sortedCustomers = subscriptionBased;
   // everything is above setuped right
   // now we need to check for cash based customers
   // and update their status
   for (const customerId of cashBased) {
-    const status: SortedCustomers | null = await getLatestPaymentForCustomer(client, customerId);
+    const status: SortedCustomers | null = await getLatestPaymentForCustomer(
+      client,
+      customerId
+    );
 
     if (status && status.membershipStatus === "ACTIVE") {
       sortedCustomers.push({
@@ -564,24 +586,28 @@ export async function syncCustomersWithPrisma() {
   }
 }
 
-async function getLatestPaymentForCustomer(client: any, customerId: string): Promise<SortedCustomers | null> {
+async function getLatestPaymentForCustomer(
+  client: any,
+  customerId: string
+): Promise<SortedCustomers | null> {
   if (!customerId) {
     console.error("Error: customerId is required.");
     return null;
   }
-
   try {
+    let cursor = undefined;
     const response = await client.paymentsApi.listPayments(
       undefined, // start time
       undefined, // end time
-      'DESC', // sortOrder: DESC for latest payments first
-      undefined, // cursor
+      "DESC", // sortOrder: DESC for latest payments first
+      cursor || undefined, // cursor
       undefined, // locationId
       undefined, // total
       undefined, // last4
       undefined, // cardBrand
       100 // limit increased to get more payments
     );
+    cursor = response.result.cursor || undefined; // Ensure cursor is never null
 
     if (!response.result || !response.result.payments) {
       console.error("Error: Invalid response from API.");
@@ -593,13 +619,12 @@ async function getLatestPaymentForCustomer(client: any, customerId: string): Pro
       (payment: Payment) =>
         payment.customerId === customerId &&
         payment.amountMoney?.amount !== undefined &&
-        payment.amountMoney?.amount >= 2500n &&  // Use `bigint` for comparison
-        payment.amountMoney?.amount <= 3100n    // Use `bigint` for comparison
+        payment.amountMoney?.amount >= 2500n && // Use `bigint` for comparison
+        payment.amountMoney?.amount <= 3100n // Use `bigint` for comparison
     );
-    let notfoundPaymentCustomerIds = []
+    let notfoundPaymentCustomerIds = [];
     if (customerPayments.length === 0) {
       notfoundPaymentCustomerIds.push(customerId);
-      console.log("Not Found Payment Customer Ids: ", notfoundPaymentCustomerIds);
       return null;
     }
 
@@ -607,8 +632,13 @@ async function getLatestPaymentForCustomer(client: any, customerId: string): Pro
     const latestPayment = customerPayments[0];
 
     // Check for the createdAt timestamp and convert it to a next payment date
-    if (!latestPayment.createdAt || isNaN(new Date(latestPayment.createdAt).getTime())) {
-      console.error("Error: Invalid or missing createdAt timestamp for latest payment.");
+    if (
+      !latestPayment.createdAt ||
+      isNaN(new Date(latestPayment.createdAt).getTime())
+    ) {
+      console.error(
+        "Error: Invalid or missing createdAt timestamp for latest payment."
+      );
       return null;
     }
 
@@ -616,21 +646,19 @@ async function getLatestPaymentForCustomer(client: any, customerId: string): Pro
     const nextPaymentDate = new Date(latestPayment.createdAt);
     nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
 
-
     // Return the sorted customer object
     const data: SortedCustomers = {
       customerId: latestPayment.customerId,
-      nextPaymentDate: nextPaymentDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
-      membershipStatus: 'ACTIVE',
+      nextPaymentDate: nextPaymentDate.toISOString().split("T")[0], // Format as YYYY-MM-DD
+      membershipStatus: "ACTIVE",
     };
 
     return data;
   } catch (error) {
-    console.error('Error fetching payments:', error);
+    console.error("Error fetching payments:", error);
     return null;
   }
 }
-
 
 // async function fetchSquareSubscription(customerId: string) {
 //   const env = getEnv();

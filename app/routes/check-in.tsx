@@ -47,7 +47,6 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const customer = await getCustomerByPhoneNumber(phoneNumber);
-
     if (!customer) {
       return json({
         success: false,
@@ -66,7 +65,7 @@ export async function action({ request }: ActionFunctionArgs) {
       (customer.membershipType === "Subscription Based" &&
         nextPaymentDate &&
         nextPaymentDate >= today) ||
-      (customer.membershipType === "Cash Payment Based" &&
+      (customer.membershipType === "Cash Based" &&
         nextPaymentDate &&
         nextPaymentDate >= today);
 
